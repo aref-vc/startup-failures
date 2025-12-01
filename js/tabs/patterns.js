@@ -9,7 +9,7 @@ function initPatterns() {
   renderCorrelationMatrix();
   renderReasonNetwork();
   renderReasonCombinations();
-  renderKeyInsights();
+  renderFundingSurvivalScatter();
 }
 
 // ============================================

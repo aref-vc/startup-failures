@@ -6,9 +6,9 @@ function initFunding() {
   if (fundingInitialized) return;
   fundingInitialized = true;
 
-  renderFundingTiers();
+  renderTierSurvival();
   renderFundingScatter();
-  renderTopFunded();
+  renderFundingByReason();
   renderFundingYearly();
 }
 

@@ -8,8 +8,8 @@ function initTimeline() {
 
   renderTimelineMain();
   renderDecadeComparison();
-  renderEraCards();
-  renderNotableFailures();
+  renderSurvivalTrend();
+  renderFailureAcceleration();
 }
 
 // ============================================

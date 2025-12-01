@@ -6,7 +6,7 @@ function initSectors() {
   if (sectorsInitialized) return;
   sectorsInitialized = true;
 
-  renderSectorsSummary();
+  renderSectorFunding();
   renderSectorRadar();
   renderSectorSurvival();
   renderSectorBars();

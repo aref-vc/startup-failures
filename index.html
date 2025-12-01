@@ -92,12 +92,15 @@
       <!-- Tab 1: Overview -->
       <div id="overview" class="tab-panel active">
         <div class="dashboard-grid">
-          <!-- Row 1 Left: Hero Stats -->
+          <!-- Row 1 Left: Reason Impact on Survival -->
           <div class="quadrant">
             <div class="quadrant-header">
-              <div class="quadrant-title">Key Metrics</div>
+              <div class="quadrant-title">Reason Impact</div>
+              <div class="quadrant-subtitle">avg survival by failure reason</div>
             </div>
-            <div class="quadrant-content" id="overview-stats"></div>
+            <div class="quadrant-content">
+              <div class="chart-container" id="overview-reason-survival"></div>
+            </div>
           </div>
 
           <!-- Row 1 Right: Failure Reasons Treemap -->
@@ -171,13 +174,15 @@
             </div>
           </div>
 
-          <!-- Row 2 Right: Key Insights -->
+          <!-- Row 2 Right: Funding vs Survival -->
           <div class="quadrant">
             <div class="quadrant-header">
-              <div class="quadrant-title">Key Insights</div>
-              <div class="quadrant-subtitle">statistical findings</div>
+              <div class="quadrant-title">Funding vs Survival</div>
+              <div class="quadrant-subtitle">log scale with R² trend</div>
             </div>
-            <div class="quadrant-content" id="patterns-insights"></div>
+            <div class="quadrant-content">
+              <div class="chart-container" id="patterns-scatter"></div>
+            </div>
           </div>
         </div>
       </div>
@@ -185,12 +190,15 @@
       <!-- Tab 3: Sectors -->
       <div id="sectors" class="tab-panel">
         <div class="dashboard-grid">
-          <!-- Row 1 Left: Sector Summary -->
+          <!-- Row 1 Left: Capital by Sector -->
           <div class="quadrant">
             <div class="quadrant-header">
-              <div class="quadrant-title">Sectors Overview</div>
+              <div class="quadrant-title">Capital by Sector</div>
+              <div class="quadrant-subtitle">funding lost treemap</div>
             </div>
-            <div class="quadrant-content" id="sectors-summary"></div>
+            <div class="quadrant-content">
+              <div class="chart-container" id="sectors-funding"></div>
+            </div>
           </div>
 
           <!-- Row 1 Right: Radar Chart -->
@@ -231,12 +239,15 @@
       <!-- Tab 4: Funding -->
       <div id="funding" class="tab-panel">
         <div class="dashboard-grid">
-          <!-- Row 1 Left: Funding Tiers -->
+          <!-- Row 1 Left: Tier Survival Analysis -->
           <div class="quadrant">
             <div class="quadrant-header">
-              <div class="quadrant-title">Funding Tiers</div>
+              <div class="quadrant-title">Tier Survival</div>
+              <div class="quadrant-subtitle">survival by funding level</div>
             </div>
-            <div class="quadrant-content" id="funding-tiers"></div>
+            <div class="quadrant-content">
+              <div class="chart-container" id="funding-tier-survival"></div>
+            </div>
           </div>
 
           <!-- Row 1 Right: Scatter Plot -->
@@ -250,13 +261,15 @@
             </div>
           </div>
 
-          <!-- Row 2 Left: Top Funded -->
+          <!-- Row 2 Left: Funding by Reason -->
           <div class="quadrant">
             <div class="quadrant-header">
-              <div class="quadrant-title">Top Funded Failures</div>
-              <div class="quadrant-subtitle">most capital lost</div>
+              <div class="quadrant-title">Funding by Reason</div>
+              <div class="quadrant-subtitle">avg funding per failure reason</div>
             </div>
-            <div class="quadrant-content" id="funding-top"></div>
+            <div class="quadrant-content">
+              <div class="chart-container" id="funding-by-reason"></div>
+            </div>
           </div>
 
           <!-- Row 2 Right: Funding by Year -->
@@ -297,21 +310,26 @@
             </div>
           </div>
 
-          <!-- Row 2 Left: Era Cards -->
+          <!-- Row 2 Left: Survival Trend -->
           <div class="quadrant">
             <div class="quadrant-header">
-              <div class="quadrant-title">Key Eras</div>
+              <div class="quadrant-title">Survival Trends</div>
+              <div class="quadrant-subtitle">are startups lasting longer?</div>
             </div>
-            <div class="quadrant-content" id="timeline-eras"></div>
+            <div class="quadrant-content">
+              <div class="chart-container" id="timeline-survival-trend"></div>
+            </div>
           </div>
 
-          <!-- Row 2 Right: Notable Failures -->
+          <!-- Row 2 Right: Failure Acceleration -->
           <div class="quadrant">
             <div class="quadrant-header">
-              <div class="quadrant-title">Notable Failures</div>
-              <div class="quadrant-subtitle">case studies</div>
+              <div class="quadrant-title">Failure Acceleration</div>
+              <div class="quadrant-subtitle">year-over-year change</div>
             </div>
-            <div class="quadrant-content" id="timeline-notable"></div>
+            <div class="quadrant-content">
+              <div class="chart-container" id="timeline-acceleration"></div>
+            </div>
           </div>
         </div>
       </div>

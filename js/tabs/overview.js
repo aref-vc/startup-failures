@@ -6,7 +6,7 @@ function initOverview() {
   if (overviewInitialized) return;
   overviewInitialized = true;
 
-  renderOverviewStats();
+  renderReasonSurvival();
   renderFailureTreemap();
   renderCoOccurrenceHeatmap();
   renderYearlyTimeline();
