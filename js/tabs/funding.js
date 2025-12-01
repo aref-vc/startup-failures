@@ -10,6 +10,10 @@ function initFunding() {
   renderFundingScatter();
   renderTopFunded();
   renderFundingYearly();
+  renderTierSurvival();
+  renderFundingByReason();
+  renderFundingOutliers();
+  renderFundingROI();
 }
 
 // ============================================
@@ -390,4 +394,424 @@ function renderFundingYearly() {
     .attr('font-size', '11px')
     .attr('font-weight', '500')
     .text(Utils.formatMoney(lastPoint.cumulative));
+}
+
+// ============================================
+// Tier Survival (Grouped Bar Chart)
+// ============================================
+function renderTierSurvival() {
+  const container = document.getElementById('funding-tier-survival');
+  if (!container) return;
+
+  const { width, height, margin, innerWidth, innerHeight } = Utils.getChartDimensions(container);
+
+  const tiers = ['Pre-Seed', 'Seed', 'Series A', 'Series B', 'Series C+', 'Mega'];
+  const tierColors = {
+    'Pre-Seed': Utils.colors.cyan,
+    'Seed': Utils.colors.emerald,
+    'Series A': Utils.colors.lime,
+    'Series B': Utils.colors.amber,
+    'Series C+': Utils.colors.orange,
+    'Mega': Utils.colors.coral
+  };
+
+  const tierData = tiers.map(tier => {
+    const data = DATA.byFundingTier[tier] || { avgSurvival: 0, count: 0 };
+    return {
+      tier,
+      avgSurvival: data.avgSurvival || 0,
+      count: data.count || 0,
+      color: tierColors[tier]
+    };
+  }).filter(d => d.count > 0);
+
+  const svg = Utils.createSvg(container, width, height, margin);
+
+  // Scales
+  const x = d3.scaleBand()
+    .domain(tierData.map(d => d.tier))
+    .range([0, innerWidth])
+    .padding(0.3);
+
+  const y = d3.scaleLinear()
+    .domain([0, d3.max(tierData, d => d.avgSurvival) * 1.1])
+    .range([innerHeight, 0]);
+
+  // Grid
+  Utils.addGridLines(svg, x, y, innerWidth, innerHeight);
+
+  // Average line
+  const avgSurvival = DATA.summary.avgSurvivalYears;
+  svg.append('line')
+    .attr('x1', 0)
+    .attr('x2', innerWidth)
+    .attr('y1', y(avgSurvival))
+    .attr('y2', y(avgSurvival))
+    .attr('stroke', Utils.colors.textTertiary)
+    .attr('stroke-dasharray', '4,4')
+    .attr('opacity', 0.6);
+
+  svg.append('text')
+    .attr('x', innerWidth - 5)
+    .attr('y', y(avgSurvival) - 5)
+    .attr('text-anchor', 'end')
+    .attr('fill', Utils.colors.textTertiary)
+    .attr('font-size', '9px')
+    .text(`Overall avg: ${avgSurvival.toFixed(1)} yrs`);
+
+  // Bars
+  svg.selectAll('rect')
+    .data(tierData)
+    .join('rect')
+    .attr('x', d => x(d.tier))
+    .attr('y', d => y(d.avgSurvival))
+    .attr('width', x.bandwidth())
+    .attr('height', d => innerHeight - y(d.avgSurvival))
+    .attr('fill', d => d.color)
+    .attr('fill-opacity', 0.8)
+    .attr('rx', 3)
+    .style('cursor', 'pointer')
+    .on('mouseenter', function(event, d) {
+      d3.select(this).attr('fill-opacity', 1);
+      const diff = d.avgSurvival - avgSurvival;
+      const html = `
+        <div class="tooltip-title" style="color: ${d.color}">${d.tier}</div>
+        <div class="tooltip-row">
+          <span class="tooltip-label">Avg Survival</span>
+          <span class="tooltip-value">${d.avgSurvival.toFixed(1)} yrs</span>
+        </div>
+        <div class="tooltip-row">
+          <span class="tooltip-label">vs Overall</span>
+          <span style="color: ${diff >= 0 ? Utils.colors.emerald : Utils.colors.coral}">${diff >= 0 ? '+' : ''}${diff.toFixed(1)} yrs</span>
+        </div>
+        <div class="tooltip-row">
+          <span class="tooltip-label">Startups</span>
+          <span>${d.count}</span>
+        </div>
+      `;
+      Utils.showTooltip(html, event.pageX, event.pageY);
+    })
+    .on('mouseleave', function() {
+      d3.select(this).attr('fill-opacity', 0.8);
+      Utils.hideTooltip();
+    });
+
+  // Value labels on top
+  svg.selectAll('text.value')
+    .data(tierData)
+    .join('text')
+    .attr('class', 'value')
+    .attr('x', d => x(d.tier) + x.bandwidth() / 2)
+    .attr('y', d => y(d.avgSurvival) - 5)
+    .attr('text-anchor', 'middle')
+    .attr('fill', d => d.color)
+    .attr('font-size', '10px')
+    .attr('font-weight', '500')
+    .text(d => d.avgSurvival.toFixed(1));
+
+  // X axis
+  const xAxis = svg.append('g')
+    .attr('transform', `translate(0,${innerHeight})`)
+    .call(d3.axisBottom(x));
+  xAxis.selectAll('text')
+    .attr('fill', Utils.colors.textTertiary)
+    .attr('font-size', '9px');
+  xAxis.selectAll('line, path').attr('stroke', Utils.colors.border);
+
+  // Y axis
+  const yAxis = svg.append('g')
+    .call(d3.axisLeft(y).ticks(5).tickFormat(d => d + ' yrs'));
+  Utils.styleAxis(yAxis);
+}
+
+// ============================================
+// Funding by Reason (Horizontal Bar Chart)
+// ============================================
+function renderFundingByReason() {
+  const container = document.getElementById('funding-by-reason');
+  if (!container) return;
+
+  const { width, height, margin, innerWidth, innerHeight } = Utils.getChartDimensions(container);
+
+  // Calculate avg funding for each reason
+  const reasonFunding = DATA.failureReasons.map(reason => {
+    const affected = DATA.startups.filter(s => s.failureReasons[reason] === 1 && s.fundingAmount > 0);
+    return {
+      reason,
+      avgFunding: affected.length > 0 ? Utils.avg(affected, 'fundingAmount') : 0,
+      count: affected.length
+    };
+  }).filter(r => r.count >= 5).sort((a, b) => b.avgFunding - a.avgFunding);
+
+  const svg = Utils.createSvg(container, width, height, { ...margin, left: 100 });
+  const adjWidth = innerWidth - 50;
+
+  // Scales
+  const y = d3.scaleBand()
+    .domain(reasonFunding.map(d => d.reason))
+    .range([0, innerHeight])
+    .padding(0.2);
+
+  const x = d3.scaleLinear()
+    .domain([0, d3.max(reasonFunding, d => d.avgFunding) * 1.1])
+    .range([0, adjWidth]);
+
+  // Overall average line
+  const overallAvg = Utils.avg(DATA.startups.filter(s => s.fundingAmount > 0), 'fundingAmount');
+  svg.append('line')
+    .attr('x1', x(overallAvg))
+    .attr('x2', x(overallAvg))
+    .attr('y1', 0)
+    .attr('y2', innerHeight)
+    .attr('stroke', Utils.colors.amber)
+    .attr('stroke-dasharray', '4,4')
+    .attr('opacity', 0.6);
+
+  // Bars
+  reasonFunding.forEach(d => {
+    const color = Utils.getReasonColor(d.reason);
+
+    svg.append('rect')
+      .attr('x', 0)
+      .attr('y', y(d.reason))
+      .attr('width', x(d.avgFunding))
+      .attr('height', y.bandwidth())
+      .attr('fill', color)
+      .attr('fill-opacity', 0.8)
+      .attr('rx', 3)
+      .style('cursor', 'pointer')
+      .on('mouseenter', function(event) {
+        d3.select(this).attr('fill-opacity', 1);
+        const diff = d.avgFunding - overallAvg;
+        const html = `
+          <div class="tooltip-title">${d.reason}</div>
+          <div class="tooltip-row">
+            <span class="tooltip-label">Avg Funding</span>
+            <span class="tooltip-value">$${d.avgFunding.toFixed(0)}M</span>
+          </div>
+          <div class="tooltip-row">
+            <span class="tooltip-label">vs Overall</span>
+            <span style="color: ${diff >= 0 ? Utils.colors.coral : Utils.colors.emerald}">${diff >= 0 ? '+' : ''}$${diff.toFixed(0)}M</span>
+          </div>
+          <div class="tooltip-row">
+            <span class="tooltip-label">Startups</span>
+            <span>${d.count}</span>
+          </div>
+        `;
+        Utils.showTooltip(html, event.pageX, event.pageY);
+      })
+      .on('mouseleave', function() {
+        d3.select(this).attr('fill-opacity', 0.8);
+        Utils.hideTooltip();
+      });
+
+    // Label
+    svg.append('text')
+      .attr('x', -8)
+      .attr('y', y(d.reason) + y.bandwidth() / 2)
+      .attr('text-anchor', 'end')
+      .attr('dominant-baseline', 'middle')
+      .attr('fill', Utils.colors.textSecondary)
+      .attr('font-size', '9px')
+      .text(Utils.truncate(d.reason, 12));
+
+    // Value
+    svg.append('text')
+      .attr('x', x(d.avgFunding) + 5)
+      .attr('y', y(d.reason) + y.bandwidth() / 2)
+      .attr('dominant-baseline', 'middle')
+      .attr('fill', color)
+      .attr('font-size', '9px')
+      .text('$' + d.avgFunding.toFixed(0) + 'M');
+  });
+}
+
+// ============================================
+// Funding Outliers
+// ============================================
+function renderFundingOutliers() {
+  const container = document.getElementById('funding-outliers');
+  if (!container) return;
+
+  const fundedStartups = DATA.startups.filter(s => s.fundingAmount > 0 && s.survivalYears > 0);
+
+  // Calculate efficiency (funding / survival)
+  const withEfficiency = fundedStartups.map(s => ({
+    ...s,
+    efficiency: s.fundingAmount / s.survivalYears
+  }));
+
+  // Find outliers
+  const sortedByEfficiency = [...withEfficiency].sort((a, b) => b.efficiency - a.efficiency);
+  const sortedBySurvival = [...withEfficiency].sort((a, b) => a.survivalYears - b.survivalYears);
+  const sortedByFunding = [...withEfficiency].sort((a, b) => b.fundingAmount - a.fundingAmount);
+
+  const insights = [
+    {
+      title: 'Biggest Burn Rate',
+      startup: sortedByEfficiency[0],
+      stat: `$${sortedByEfficiency[0].efficiency.toFixed(0)}M/yr`,
+      detail: `$${sortedByEfficiency[0].fundingAmount}M raised, lasted ${sortedByEfficiency[0].survivalYears} years`,
+      color: Utils.colors.coral
+    },
+    {
+      title: 'Best Efficiency',
+      startup: sortedByEfficiency[sortedByEfficiency.length - 1],
+      stat: `$${sortedByEfficiency[sortedByEfficiency.length - 1].efficiency.toFixed(1)}M/yr`,
+      detail: `$${sortedByEfficiency[sortedByEfficiency.length - 1].fundingAmount}M over ${sortedByEfficiency[sortedByEfficiency.length - 1].survivalYears} years`,
+      color: Utils.colors.emerald
+    },
+    {
+      title: 'Fastest Failure',
+      startup: sortedBySurvival[0],
+      stat: `${sortedBySurvival[0].survivalYears} year${sortedBySurvival[0].survivalYears !== 1 ? 's' : ''}`,
+      detail: `$${sortedBySurvival[0].fundingAmount}M raised before failing`,
+      color: Utils.colors.amber
+    },
+    {
+      title: 'Biggest Bet Lost',
+      startup: sortedByFunding[0],
+      stat: Utils.formatMoney(sortedByFunding[0].fundingAmount),
+      detail: `${sortedByFunding[0].survivalYears} years, ${sortedByFunding[0].sector}`,
+      color: Utils.colors.coral
+    }
+  ];
+
+  container.innerHTML = `
+    <div style="display: flex; flex-direction: column; gap: 10px; height: 100%; overflow-y: auto;">
+      ${insights.map(insight => `
+        <div style="background: var(--bg-accent); border-radius: 6px; padding: 10px; border-left: 3px solid ${insight.color};">
+          <div style="font-size: 0.625rem; color: var(--text-tertiary); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 3px;">
+            ${insight.title}
+          </div>
+          <div style="font-size: 0.875rem; font-weight: 500; color: ${insight.color}; margin-bottom: 2px;">
+            ${Utils.truncate(insight.startup.name, 20)}
+          </div>
+          <div style="font-size: 1rem; font-weight: 600; color: var(--text-primary); margin-bottom: 3px;">
+            ${insight.stat}
+          </div>
+          <div style="font-size: 0.6875rem; color: var(--text-tertiary);">
+            ${insight.detail}
+          </div>
+        </div>
+      `).join('')}
+    </div>
+  `;
+}
+
+// ============================================
+// Funding ROI (Capital Efficiency Distribution)
+// ============================================
+function renderFundingROI() {
+  const container = document.getElementById('funding-roi');
+  if (!container) return;
+
+  const { width, height, margin, innerWidth, innerHeight } = Utils.getChartDimensions(container);
+
+  // Calculate efficiency for each startup
+  const data = DATA.startups
+    .filter(s => s.fundingAmount > 0 && s.survivalYears > 0)
+    .map(s => ({
+      name: s.name,
+      efficiency: s.fundingAmount / s.survivalYears,
+      sector: s.sector,
+      funding: s.fundingAmount,
+      survival: s.survivalYears
+    }))
+    .sort((a, b) => b.efficiency - a.efficiency);
+
+  // Create bins
+  const bins = [0, 10, 25, 50, 100, 250, 500, 1000];
+  const binData = bins.slice(0, -1).map((bin, i) => {
+    const nextBin = bins[i + 1];
+    const count = data.filter(d => d.efficiency >= bin && d.efficiency < nextBin).length;
+    return {
+      range: `$${bin}-${nextBin}M/yr`,
+      min: bin,
+      max: nextBin,
+      count
+    };
+  });
+  binData.push({
+    range: '$1B+/yr',
+    min: 1000,
+    max: Infinity,
+    count: data.filter(d => d.efficiency >= 1000).length
+  });
+
+  const svg = Utils.createSvg(container, width, height, margin);
+
+  // Scales
+  const x = d3.scaleBand()
+    .domain(binData.map(d => d.range))
+    .range([0, innerWidth])
+    .padding(0.15);
+
+  const y = d3.scaleLinear()
+    .domain([0, d3.max(binData, d => d.count) * 1.1])
+    .range([innerHeight, 0]);
+
+  // Grid
+  Utils.addGridLines(svg, x, y, innerWidth, innerHeight);
+
+  // Bars
+  svg.selectAll('rect')
+    .data(binData)
+    .join('rect')
+    .attr('x', d => x(d.range))
+    .attr('y', d => y(d.count))
+    .attr('width', x.bandwidth())
+    .attr('height', d => innerHeight - y(d.count))
+    .attr('fill', (d, i) => d3.interpolate(Utils.colors.emerald, Utils.colors.coral)(i / (binData.length - 1)))
+    .attr('fill-opacity', 0.8)
+    .attr('rx', 3)
+    .style('cursor', 'pointer')
+    .on('mouseenter', function(event, d) {
+      d3.select(this).attr('fill-opacity', 1);
+      const pct = ((d.count / data.length) * 100).toFixed(1);
+      const html = `
+        <div class="tooltip-title">${d.range}</div>
+        <div class="tooltip-row">
+          <span class="tooltip-label">Startups</span>
+          <span class="tooltip-value">${d.count}</span>
+        </div>
+        <div class="tooltip-row">
+          <span class="tooltip-label">% of Total</span>
+          <span>${pct}%</span>
+        </div>
+      `;
+      Utils.showTooltip(html, event.pageX, event.pageY);
+    })
+    .on('mouseleave', function() {
+      d3.select(this).attr('fill-opacity', 0.8);
+      Utils.hideTooltip();
+    });
+
+  // X axis
+  const xAxis = svg.append('g')
+    .attr('transform', `translate(0,${innerHeight})`)
+    .call(d3.axisBottom(x));
+  xAxis.selectAll('text')
+    .attr('transform', 'rotate(-35)')
+    .attr('text-anchor', 'end')
+    .attr('dx', '-0.5em')
+    .attr('dy', '0.5em')
+    .attr('fill', Utils.colors.textTertiary)
+    .attr('font-size', '8px');
+  xAxis.selectAll('line, path').attr('stroke', Utils.colors.border);
+
+  // Y axis
+  const yAxis = svg.append('g')
+    .call(d3.axisLeft(y).ticks(5));
+  Utils.styleAxis(yAxis);
+
+  // Median annotation
+  const median = data[Math.floor(data.length / 2)].efficiency;
+  svg.append('text')
+    .attr('x', innerWidth)
+    .attr('y', 10)
+    .attr('text-anchor', 'end')
+    .attr('fill', Utils.colors.textSecondary)
+    .attr('font-size', '10px')
+    .text(`Median: $${median.toFixed(0)}M/yr`);
 }

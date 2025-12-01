@@ -10,6 +10,10 @@ function initOverview() {
   renderFailureTreemap();
   renderCoOccurrenceHeatmap();
   renderYearlyTimeline();
+  renderReasonSurvival();
+  renderFundingDistribution();
+  renderSectorPie();
+  renderReasonCountDist();
 }
 
 // ============================================
@@ -421,4 +425,477 @@ function renderYearlyTimeline() {
         .text(a.label);
     }
   });
+}
+
+// ============================================
+// Reason Impact on Survival
+// ============================================
+function renderReasonSurvival() {
+  const container = document.getElementById('overview-reason-survival');
+  if (!container) return;
+
+  const { width, height } = Utils.getChartDimensions(container);
+  const margin = { top: 20, right: 20, bottom: 80, left: 50 };
+  const innerWidth = width - margin.left - margin.right;
+  const innerHeight = height - margin.top - margin.bottom;
+
+  // Prepare data - avg survival by reason
+  const reasonData = Object.entries(DATA.byReason)
+    .map(([reason, data]) => ({
+      reason: reason,
+      avgSurvival: data.avgSurvival,
+      count: data.count
+    }))
+    .sort((a, b) => a.avgSurvival - b.avgSurvival);
+
+  const svg = d3.select(container)
+    .append('svg')
+    .attr('width', width)
+    .attr('height', height)
+    .append('g')
+    .attr('transform', `translate(${margin.left},${margin.top})`);
+
+  // Scales
+  const x = d3.scaleBand()
+    .domain(reasonData.map(d => d.reason))
+    .range([0, innerWidth])
+    .padding(0.2);
+
+  const y = d3.scaleLinear()
+    .domain([0, d3.max(reasonData, d => d.avgSurvival) * 1.1])
+    .range([innerHeight, 0]);
+
+  // Grid lines
+  svg.append('g')
+    .attr('class', 'grid')
+    .call(d3.axisLeft(y).tickSize(-innerWidth).tickFormat(''))
+    .selectAll('line')
+    .attr('stroke', Utils.colors.border)
+    .attr('stroke-opacity', 0.5);
+  svg.selectAll('.grid .domain').remove();
+
+  // Average line
+  const avgSurvival = DATA.summary.avgSurvivalYears;
+  svg.append('line')
+    .attr('x1', 0)
+    .attr('x2', innerWidth)
+    .attr('y1', y(avgSurvival))
+    .attr('y2', y(avgSurvival))
+    .attr('stroke', Utils.colors.amber)
+    .attr('stroke-width', 2)
+    .attr('stroke-dasharray', '5,5');
+
+  svg.append('text')
+    .attr('x', innerWidth - 5)
+    .attr('y', y(avgSurvival) - 5)
+    .attr('text-anchor', 'end')
+    .attr('fill', Utils.colors.amber)
+    .attr('font-size', '10px')
+    .text(`Avg: ${avgSurvival.toFixed(1)} yrs`);
+
+  // Bars
+  svg.selectAll('rect')
+    .data(reasonData)
+    .join('rect')
+    .attr('x', d => x(d.reason))
+    .attr('y', d => y(d.avgSurvival))
+    .attr('width', x.bandwidth())
+    .attr('height', d => innerHeight - y(d.avgSurvival))
+    .attr('fill', d => d.avgSurvival < avgSurvival ? Utils.colors.coral : Utils.colors.emerald)
+    .attr('fill-opacity', 0.8)
+    .attr('rx', 2)
+    .style('cursor', 'pointer')
+    .on('mouseenter', function(event, d) {
+      d3.select(this).attr('fill-opacity', 1);
+      const diff = d.avgSurvival - avgSurvival;
+      const html = `
+        <div class="tooltip-title">${d.reason}</div>
+        <div class="tooltip-row">
+          <span class="tooltip-label">Avg Survival</span>
+          <span class="tooltip-value">${d.avgSurvival.toFixed(1)} yrs</span>
+        </div>
+        <div class="tooltip-row">
+          <span class="tooltip-label">vs Average</span>
+          <span style="color: ${diff < 0 ? Utils.colors.coral : Utils.colors.emerald}">${diff >= 0 ? '+' : ''}${diff.toFixed(1)} yrs</span>
+        </div>
+        <div class="tooltip-row">
+          <span class="tooltip-label">Startups</span>
+          <span>${d.count}</span>
+        </div>
+      `;
+      Utils.showTooltip(html, event.pageX, event.pageY);
+    })
+    .on('mouseleave', function() {
+      d3.select(this).attr('fill-opacity', 0.8);
+      Utils.hideTooltip();
+    });
+
+  // X axis
+  const xAxis = svg.append('g')
+    .attr('transform', `translate(0,${innerHeight})`)
+    .call(d3.axisBottom(x));
+  xAxis.selectAll('text')
+    .attr('transform', 'rotate(-45)')
+    .attr('text-anchor', 'end')
+    .attr('dx', '-0.5em')
+    .attr('dy', '0.5em')
+    .attr('fill', Utils.colors.textTertiary)
+    .attr('font-size', '9px')
+    .text(d => Utils.truncate(d, 12));
+  xAxis.selectAll('line, path').attr('stroke', Utils.colors.border);
+
+  // Y axis
+  const yAxis = svg.append('g')
+    .call(d3.axisLeft(y).ticks(5).tickFormat(d => d + ' yrs'));
+  Utils.styleAxis(yAxis);
+}
+
+// ============================================
+// Funding Distribution Histogram
+// ============================================
+function renderFundingDistribution() {
+  const container = document.getElementById('overview-funding-dist');
+  if (!container) return;
+
+  const { width, height } = Utils.getChartDimensions(container);
+  const margin = { top: 20, right: 20, bottom: 40, left: 50 };
+  const innerWidth = width - margin.left - margin.right;
+  const innerHeight = height - margin.top - margin.bottom;
+
+  // Prepare data - funding amounts
+  const fundings = DATA.startups
+    .map(s => s.funding)
+    .filter(f => f > 0);
+
+  // Create bins
+  const bins = [0, 10, 25, 50, 100, 250, 500, 1000, 5000];
+  const binData = bins.slice(0, -1).map((bin, i) => {
+    const nextBin = bins[i + 1];
+    const count = fundings.filter(f => f >= bin && f < nextBin).length;
+    return {
+      range: `$${bin}-${nextBin}M`,
+      min: bin,
+      max: nextBin,
+      count: count
+    };
+  });
+  // Add 5000+ bin
+  binData.push({
+    range: '$5B+',
+    min: 5000,
+    max: Infinity,
+    count: fundings.filter(f => f >= 5000).length
+  });
+
+  const svg = d3.select(container)
+    .append('svg')
+    .attr('width', width)
+    .attr('height', height)
+    .append('g')
+    .attr('transform', `translate(${margin.left},${margin.top})`);
+
+  // Scales
+  const x = d3.scaleBand()
+    .domain(binData.map(d => d.range))
+    .range([0, innerWidth])
+    .padding(0.15);
+
+  const y = d3.scaleLinear()
+    .domain([0, d3.max(binData, d => d.count) * 1.1])
+    .range([innerHeight, 0]);
+
+  // Grid
+  svg.append('g')
+    .attr('class', 'grid')
+    .call(d3.axisLeft(y).tickSize(-innerWidth).tickFormat(''))
+    .selectAll('line')
+    .attr('stroke', Utils.colors.border)
+    .attr('stroke-opacity', 0.5);
+  svg.selectAll('.grid .domain').remove();
+
+  // Bars with gradient
+  svg.selectAll('rect')
+    .data(binData)
+    .join('rect')
+    .attr('x', d => x(d.range))
+    .attr('y', d => y(d.count))
+    .attr('width', x.bandwidth())
+    .attr('height', d => innerHeight - y(d.count))
+    .attr('fill', (d, i) => d3.interpolate(Utils.colors.cyan, Utils.colors.coral)(i / (binData.length - 1)))
+    .attr('fill-opacity', 0.8)
+    .attr('rx', 2)
+    .style('cursor', 'pointer')
+    .on('mouseenter', function(event, d) {
+      d3.select(this).attr('fill-opacity', 1);
+      const pct = ((d.count / fundings.length) * 100).toFixed(1);
+      const html = `
+        <div class="tooltip-title">${d.range}</div>
+        <div class="tooltip-row">
+          <span class="tooltip-label">Startups</span>
+          <span class="tooltip-value">${d.count}</span>
+        </div>
+        <div class="tooltip-row">
+          <span class="tooltip-label">% of Total</span>
+          <span>${pct}%</span>
+        </div>
+      `;
+      Utils.showTooltip(html, event.pageX, event.pageY);
+    })
+    .on('mouseleave', function() {
+      d3.select(this).attr('fill-opacity', 0.8);
+      Utils.hideTooltip();
+    });
+
+  // X axis
+  const xAxis = svg.append('g')
+    .attr('transform', `translate(0,${innerHeight})`)
+    .call(d3.axisBottom(x));
+  xAxis.selectAll('text')
+    .attr('fill', Utils.colors.textTertiary)
+    .attr('font-size', '9px');
+  xAxis.selectAll('line, path').attr('stroke', Utils.colors.border);
+
+  // Y axis
+  const yAxis = svg.append('g')
+    .call(d3.axisLeft(y).ticks(5));
+  Utils.styleAxis(yAxis);
+}
+
+// ============================================
+// Sector Breakdown Donut Chart
+// ============================================
+function renderSectorPie() {
+  const container = document.getElementById('overview-sector-pie');
+  if (!container) return;
+
+  const { width, height } = Utils.getChartDimensions(container);
+  const radius = Math.min(width, height) / 2 - 20;
+
+  // Prepare data
+  const sectorData = Object.entries(DATA.bySector)
+    .map(([sector, data]) => ({
+      sector: sector,
+      count: data.count,
+      funding: data.totalFunding
+    }))
+    .sort((a, b) => b.count - a.count);
+
+  const total = d3.sum(sectorData, d => d.count);
+
+  const svg = d3.select(container)
+    .append('svg')
+    .attr('width', width)
+    .attr('height', height)
+    .append('g')
+    .attr('transform', `translate(${width / 2},${height / 2})`);
+
+  // Pie layout
+  const pie = d3.pie()
+    .value(d => d.count)
+    .sort(null);
+
+  const arc = d3.arc()
+    .innerRadius(radius * 0.5)
+    .outerRadius(radius);
+
+  const arcHover = d3.arc()
+    .innerRadius(radius * 0.5)
+    .outerRadius(radius + 8);
+
+  // Draw slices
+  const slices = svg.selectAll('path')
+    .data(pie(sectorData))
+    .join('path')
+    .attr('d', arc)
+    .attr('fill', (d, i) => Utils.getColor(i))
+    .attr('fill-opacity', 0.85)
+    .attr('stroke', Utils.colors.bgMain)
+    .attr('stroke-width', 2)
+    .style('cursor', 'pointer')
+    .on('mouseenter', function(event, d) {
+      d3.select(this)
+        .transition()
+        .duration(200)
+        .attr('d', arcHover)
+        .attr('fill-opacity', 1);
+      const pct = ((d.data.count / total) * 100).toFixed(1);
+      const html = `
+        <div class="tooltip-title">${d.data.sector}</div>
+        <div class="tooltip-row">
+          <span class="tooltip-label">Failures</span>
+          <span class="tooltip-value">${d.data.count}</span>
+        </div>
+        <div class="tooltip-row">
+          <span class="tooltip-label">% of Total</span>
+          <span>${pct}%</span>
+        </div>
+        <div class="tooltip-row">
+          <span class="tooltip-label">Capital Lost</span>
+          <span>${Utils.formatMoney(d.data.funding)}</span>
+        </div>
+      `;
+      Utils.showTooltip(html, event.pageX, event.pageY);
+    })
+    .on('mouseleave', function() {
+      d3.select(this)
+        .transition()
+        .duration(200)
+        .attr('d', arc)
+        .attr('fill-opacity', 0.85);
+      Utils.hideTooltip();
+    });
+
+  // Center text
+  svg.append('text')
+    .attr('text-anchor', 'middle')
+    .attr('dy', '-0.2em')
+    .attr('fill', Utils.colors.text)
+    .attr('font-size', '24px')
+    .attr('font-weight', '600')
+    .text(sectorData.length);
+
+  svg.append('text')
+    .attr('text-anchor', 'middle')
+    .attr('dy', '1.2em')
+    .attr('fill', Utils.colors.textTertiary)
+    .attr('font-size', '12px')
+    .text('sectors');
+
+  // Legend
+  const legendG = svg.append('g')
+    .attr('transform', `translate(${radius + 15}, ${-radius + 10})`);
+
+  sectorData.slice(0, 6).forEach((d, i) => {
+    const g = legendG.append('g')
+      .attr('transform', `translate(0, ${i * 18})`);
+
+    g.append('rect')
+      .attr('width', 10)
+      .attr('height', 10)
+      .attr('rx', 2)
+      .attr('fill', Utils.getColor(i));
+
+    g.append('text')
+      .attr('x', 15)
+      .attr('y', 9)
+      .attr('fill', Utils.colors.textTertiary)
+      .attr('font-size', '10px')
+      .text(Utils.truncate(d.sector, 15));
+  });
+}
+
+// ============================================
+// Failure Complexity (Reason Count Distribution)
+// ============================================
+function renderReasonCountDist() {
+  const container = document.getElementById('overview-reason-count');
+  if (!container) return;
+
+  const { width, height } = Utils.getChartDimensions(container);
+  const margin = { top: 20, right: 20, bottom: 40, left: 50 };
+  const innerWidth = width - margin.left - margin.right;
+  const innerHeight = height - margin.top - margin.bottom;
+
+  // Count reasons per startup
+  const reasonCounts = DATA.startups.map(s => s.reasonCount);
+  const countDist = {};
+  reasonCounts.forEach(c => {
+    countDist[c] = (countDist[c] || 0) + 1;
+  });
+
+  const data = Object.entries(countDist)
+    .map(([count, num]) => ({
+      reasons: parseInt(count),
+      startups: num
+    }))
+    .sort((a, b) => a.reasons - b.reasons);
+
+  const total = DATA.startups.length;
+  const avgReasons = (d3.sum(reasonCounts) / total).toFixed(1);
+
+  const svg = d3.select(container)
+    .append('svg')
+    .attr('width', width)
+    .attr('height', height)
+    .append('g')
+    .attr('transform', `translate(${margin.left},${margin.top})`);
+
+  // Scales
+  const x = d3.scaleBand()
+    .domain(data.map(d => d.reasons))
+    .range([0, innerWidth])
+    .padding(0.2);
+
+  const y = d3.scaleLinear()
+    .domain([0, d3.max(data, d => d.startups) * 1.1])
+    .range([innerHeight, 0]);
+
+  // Grid
+  svg.append('g')
+    .attr('class', 'grid')
+    .call(d3.axisLeft(y).tickSize(-innerWidth).tickFormat(''))
+    .selectAll('line')
+    .attr('stroke', Utils.colors.border)
+    .attr('stroke-opacity', 0.5);
+  svg.selectAll('.grid .domain').remove();
+
+  // Bars
+  svg.selectAll('rect')
+    .data(data)
+    .join('rect')
+    .attr('x', d => x(d.reasons))
+    .attr('y', d => y(d.startups))
+    .attr('width', x.bandwidth())
+    .attr('height', d => innerHeight - y(d.startups))
+    .attr('fill', (d, i) => {
+      // Color intensity based on count
+      const colors = [Utils.colors.emerald, Utils.colors.lime, Utils.colors.amber, Utils.colors.orange, Utils.colors.coral];
+      return colors[Math.min(d.reasons - 1, colors.length - 1)];
+    })
+    .attr('fill-opacity', 0.8)
+    .attr('rx', 2)
+    .style('cursor', 'pointer')
+    .on('mouseenter', function(event, d) {
+      d3.select(this).attr('fill-opacity', 1);
+      const pct = ((d.startups / total) * 100).toFixed(1);
+      const html = `
+        <div class="tooltip-title">${d.reasons} Failure Reason${d.reasons > 1 ? 's' : ''}</div>
+        <div class="tooltip-row">
+          <span class="tooltip-label">Startups</span>
+          <span class="tooltip-value">${d.startups}</span>
+        </div>
+        <div class="tooltip-row">
+          <span class="tooltip-label">% of Total</span>
+          <span>${pct}%</span>
+        </div>
+      `;
+      Utils.showTooltip(html, event.pageX, event.pageY);
+    })
+    .on('mouseleave', function() {
+      d3.select(this).attr('fill-opacity', 0.8);
+      Utils.hideTooltip();
+    });
+
+  // X axis
+  const xAxis = svg.append('g')
+    .attr('transform', `translate(0,${innerHeight})`)
+    .call(d3.axisBottom(x).tickFormat(d => d + ' reason' + (d > 1 ? 's' : '')));
+  xAxis.selectAll('text')
+    .attr('fill', Utils.colors.textTertiary)
+    .attr('font-size', '10px');
+  xAxis.selectAll('line, path').attr('stroke', Utils.colors.border);
+
+  // Y axis
+  const yAxis = svg.append('g')
+    .call(d3.axisLeft(y).ticks(5));
+  Utils.styleAxis(yAxis);
+
+  // Average annotation
+  svg.append('text')
+    .attr('x', innerWidth)
+    .attr('y', 0)
+    .attr('text-anchor', 'end')
+    .attr('fill', Utils.colors.textSecondary)
+    .attr('font-size', '11px')
+    .text(`Avg: ${avgReasons} reasons`);
 }

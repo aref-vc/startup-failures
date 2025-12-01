@@ -9,8 +9,10 @@ function initPatterns() {
   renderCorrelationMatrix();
   renderSurvivalCurves();
   renderReasonCombinations();
+  renderFundingSurvivalScatter();
   renderSectorReasonHeatmap();
   renderFundingEfficiency();
+  renderReasonNetwork();
   renderKeyInsights();
 }
 
@@ -679,4 +681,260 @@ function renderKeyInsights() {
       `).join('')}
     </div>
   `;
+}
+
+// ============================================
+// Funding vs Survival Scatter Plot
+// ============================================
+function renderFundingSurvivalScatter() {
+  const container = document.getElementById('patterns-scatter');
+  if (!container) return;
+
+  const { width, height, margin, innerWidth, innerHeight } = Utils.getChartDimensions(container);
+
+  // Filter startups with valid data
+  const data = DATA.startups
+    .filter(s => s.fundingAmount > 0 && s.survivalYears > 0)
+    .map(s => ({
+      name: s.name,
+      funding: s.fundingAmount,
+      survival: s.survivalYears,
+      sector: s.sector,
+      reasons: s.totalFailureReasons
+    }));
+
+  const svg = Utils.createSvg(container, width, height, margin);
+
+  // Scales (log for funding)
+  const x = d3.scaleLog()
+    .domain([d3.min(data, d => d.funding) * 0.8, d3.max(data, d => d.funding) * 1.2])
+    .range([0, innerWidth]);
+
+  const y = d3.scaleLinear()
+    .domain([0, d3.max(data, d => d.survival) * 1.1])
+    .range([innerHeight, 0]);
+
+  // Add grid
+  Utils.addGridLines(svg, x, y, innerWidth, innerHeight);
+
+  // Trend line (linear regression on log-transformed data)
+  const logData = data.map(d => ({ x: Math.log10(d.funding), y: d.survival }));
+  const n = logData.length;
+  const sumX = logData.reduce((a, b) => a + b.x, 0);
+  const sumY = logData.reduce((a, b) => a + b.y, 0);
+  const sumXY = logData.reduce((a, b) => a + b.x * b.y, 0);
+  const sumX2 = logData.reduce((a, b) => a + b.x * b.x, 0);
+  const slope = (n * sumXY - sumX * sumY) / (n * sumX2 - sumX * sumX);
+  const intercept = (sumY - slope * sumX) / n;
+
+  const xDomain = x.domain();
+  const trendLine = [
+    { x: xDomain[0], y: intercept + slope * Math.log10(xDomain[0]) },
+    { x: xDomain[1], y: intercept + slope * Math.log10(xDomain[1]) }
+  ];
+
+  svg.append('line')
+    .attr('x1', x(trendLine[0].x))
+    .attr('y1', y(Math.max(0, trendLine[0].y)))
+    .attr('x2', x(trendLine[1].x))
+    .attr('y2', y(Math.max(0, trendLine[1].y)))
+    .attr('stroke', Utils.colors.amber)
+    .attr('stroke-width', 2)
+    .attr('stroke-dasharray', '6,4')
+    .attr('opacity', 0.7);
+
+  // Draw points
+  svg.selectAll('circle')
+    .data(data)
+    .join('circle')
+    .attr('cx', d => x(d.funding))
+    .attr('cy', d => y(d.survival))
+    .attr('r', d => 3 + d.reasons)
+    .attr('fill', d => Utils.getSectorColor(d.sector))
+    .attr('fill-opacity', 0.6)
+    .attr('stroke', d => Utils.getSectorColor(d.sector))
+    .attr('stroke-width', 1)
+    .style('cursor', 'pointer')
+    .on('mouseenter', function(event, d) {
+      d3.select(this)
+        .attr('fill-opacity', 1)
+        .attr('r', 4 + d.reasons);
+      const html = `
+        <div class="tooltip-title">${d.name}</div>
+        <div class="tooltip-row">
+          <span class="tooltip-label">Funding</span>
+          <span class="tooltip-value">$${d.funding.toFixed(0)}M</span>
+        </div>
+        <div class="tooltip-row">
+          <span class="tooltip-label">Survival</span>
+          <span>${d.survival.toFixed(1)} years</span>
+        </div>
+        <div class="tooltip-row">
+          <span class="tooltip-label">Sector</span>
+          <span>${d.sector}</span>
+        </div>
+        <div class="tooltip-row">
+          <span class="tooltip-label">Failure Reasons</span>
+          <span>${d.reasons}</span>
+        </div>
+      `;
+      Utils.showTooltip(html, event.pageX, event.pageY);
+    })
+    .on('mouseleave', function(event, d) {
+      d3.select(this)
+        .attr('fill-opacity', 0.6)
+        .attr('r', 3 + d.reasons);
+      Utils.hideTooltip();
+    });
+
+  // X axis
+  const xAxis = svg.append('g')
+    .attr('transform', `translate(0,${innerHeight})`)
+    .call(d3.axisBottom(x).ticks(5).tickFormat(d => '$' + Utils.formatNumber(d) + 'M'));
+  Utils.styleAxis(xAxis);
+
+  // Y axis
+  const yAxis = svg.append('g')
+    .call(d3.axisLeft(y).ticks(6).tickFormat(d => d + ' yrs'));
+  Utils.styleAxis(yAxis);
+
+  // Trend label
+  svg.append('text')
+    .attr('x', innerWidth - 5)
+    .attr('y', 15)
+    .attr('text-anchor', 'end')
+    .attr('fill', Utils.colors.amber)
+    .attr('font-size', '10px')
+    .text(`Trend: ${slope > 0 ? '+' : ''}${slope.toFixed(2)} yrs/10x funding`);
+}
+
+// ============================================
+// Reason Network (Force-Directed Graph)
+// ============================================
+function renderReasonNetwork() {
+  const container = document.getElementById('patterns-network');
+  if (!container) return;
+
+  const { width, height } = Utils.getChartDimensions(container);
+
+  // Build nodes and links from co-occurrence
+  const reasons = DATA.failureReasons;
+  const nodes = reasons.map(r => ({
+    id: r,
+    count: DATA.byReason[r].count
+  }));
+
+  const links = [];
+  for (let i = 0; i < reasons.length; i++) {
+    for (let j = i + 1; j < reasons.length; j++) {
+      const count = DATA.coOccurrence[reasons[i]][reasons[j]];
+      if (count >= 5) { // Only significant connections
+        links.push({
+          source: reasons[i],
+          target: reasons[j],
+          value: count
+        });
+      }
+    }
+  }
+
+  const svg = d3.select(container)
+    .append('svg')
+    .attr('width', width)
+    .attr('height', height);
+
+  // Node size scale
+  const nodeScale = d3.scaleSqrt()
+    .domain([0, d3.max(nodes, d => d.count)])
+    .range([8, 25]);
+
+  // Link thickness scale
+  const linkScale = d3.scaleLinear()
+    .domain([5, d3.max(links, d => d.value)])
+    .range([1, 6]);
+
+  // Force simulation
+  const simulation = d3.forceSimulation(nodes)
+    .force('link', d3.forceLink(links).id(d => d.id).distance(80))
+    .force('charge', d3.forceManyBody().strength(-200))
+    .force('center', d3.forceCenter(width / 2, height / 2))
+    .force('collision', d3.forceCollide().radius(d => nodeScale(d.count) + 5));
+
+  // Draw links
+  const link = svg.append('g')
+    .selectAll('line')
+    .data(links)
+    .join('line')
+    .attr('stroke', Utils.colors.border)
+    .attr('stroke-width', d => linkScale(d.value))
+    .attr('stroke-opacity', 0.6);
+
+  // Draw nodes
+  const node = svg.append('g')
+    .selectAll('g')
+    .data(nodes)
+    .join('g')
+    .style('cursor', 'pointer')
+    .call(d3.drag()
+      .on('start', dragstarted)
+      .on('drag', dragged)
+      .on('end', dragended));
+
+  node.append('circle')
+    .attr('r', d => nodeScale(d.count))
+    .attr('fill', d => Utils.getReasonColor(d.id))
+    .attr('fill-opacity', 0.8)
+    .attr('stroke', d => Utils.getReasonColor(d.id))
+    .attr('stroke-width', 2);
+
+  node.append('text')
+    .text(d => Utils.truncate(d.id, 8))
+    .attr('text-anchor', 'middle')
+    .attr('dy', d => nodeScale(d.count) + 12)
+    .attr('fill', Utils.colors.textSecondary)
+    .attr('font-size', '9px');
+
+  node.on('mouseenter', function(event, d) {
+    const connections = links.filter(l => l.source.id === d.id || l.target.id === d.id);
+    const html = `
+      <div class="tooltip-title">${d.id}</div>
+      <div class="tooltip-row">
+        <span class="tooltip-label">Startups</span>
+        <span class="tooltip-value">${d.count}</span>
+      </div>
+      <div class="tooltip-row">
+        <span class="tooltip-label">Connected to</span>
+        <span>${connections.length} reasons</span>
+      </div>
+    `;
+    Utils.showTooltip(html, event.pageX, event.pageY);
+  }).on('mouseleave', () => Utils.hideTooltip());
+
+  // Update positions on tick
+  simulation.on('tick', () => {
+    link
+      .attr('x1', d => d.source.x)
+      .attr('y1', d => d.source.y)
+      .attr('x2', d => d.target.x)
+      .attr('y2', d => d.target.y);
+
+    node.attr('transform', d => `translate(${d.x},${d.y})`);
+  });
+
+  function dragstarted(event) {
+    if (!event.active) simulation.alphaTarget(0.3).restart();
+    event.subject.fx = event.subject.x;
+    event.subject.fy = event.subject.y;
+  }
+
+  function dragged(event) {
+    event.subject.fx = event.x;
+    event.subject.fy = event.y;
+  }
+
+  function dragended(event) {
+    if (!event.active) simulation.alphaTarget(0);
+    event.subject.fx = null;
+    event.subject.fy = null;
+  }
 }
