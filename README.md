@@ -10,7 +10,7 @@ An interactive data visualization dashboard analyzing 403+ failed startups, expl
 
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/startup-failures.git
+git clone https://github.com/aref-vc/startup-failures.git
 
 # Open directly in browser (no server needed)
 open index.html
