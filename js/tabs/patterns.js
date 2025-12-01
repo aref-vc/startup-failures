@@ -10,6 +10,10 @@ function initPatterns() {
   renderReasonNetwork();
   renderReasonCombinations();
   renderFundingSurvivalScatter();
+  renderChordDiagram();
+  renderContourDensity();
+  renderBeeswarm();
+  renderSlopeChart();
 }
 
 // ============================================
@@ -933,4 +937,377 @@ function renderReasonNetwork() {
     event.subject.fx = null;
     event.subject.fy = null;
   }
+}
+
+// ============================================
+// Chord Diagram
+// ============================================
+function renderChordDiagram() {
+  const container = document.getElementById('patterns-chord');
+  if (!container) return;
+
+  const { width, height } = Utils.getChartDimensions(container);
+  const outerRadius = Math.min(width, height) / 2 - 40;
+  const innerRadius = outerRadius - 20;
+
+  // Get top 8 reasons for chord
+  const topReasons = Object.entries(DATA.byReason)
+    .sort((a, b) => b[1].count - a[1].count)
+    .slice(0, 8)
+    .map(d => d[0]);
+
+  // Build co-occurrence matrix
+  const matrix = topReasons.map(r1 =>
+    topReasons.map(r2 => DATA.coOccurrence[r1]?.[r2] || 0)
+  );
+
+  const svg = d3.select(container)
+    .append('svg')
+    .attr('width', width)
+    .attr('height', height)
+    .append('g')
+    .attr('transform', `translate(${width/2},${height/2})`);
+
+  const chord = d3.chord()
+    .padAngle(0.05)
+    .sortSubgroups(d3.descending);
+
+  const chords = chord(matrix);
+
+  const arc = d3.arc()
+    .innerRadius(innerRadius)
+    .outerRadius(outerRadius);
+
+  const ribbon = d3.ribbon()
+    .radius(innerRadius);
+
+  // Draw outer arcs
+  svg.selectAll('.arc')
+    .data(chords.groups)
+    .join('path')
+    .attr('class', 'arc')
+    .attr('d', arc)
+    .attr('fill', d => Utils.getReasonColor(topReasons[d.index]))
+    .attr('stroke', Utils.colors.bgMain);
+
+  // Draw ribbons
+  svg.selectAll('.ribbon')
+    .data(chords)
+    .join('path')
+    .attr('class', 'ribbon')
+    .attr('d', ribbon)
+    .attr('fill', d => Utils.getReasonColor(topReasons[d.source.index]))
+    .attr('fill-opacity', 0.6)
+    .attr('stroke', 'none')
+    .style('cursor', 'pointer')
+    .on('mouseenter', function(event, d) {
+      d3.select(this).attr('fill-opacity', 0.9);
+      const html = `
+        <div class="tooltip-title">${topReasons[d.source.index]} ↔ ${topReasons[d.target.index]}</div>
+        <div class="tooltip-row"><span class="tooltip-label">Co-occurrence</span><span class="tooltip-value">${d.source.value}</span></div>
+      `;
+      Utils.showTooltip(html, event.pageX, event.pageY);
+    })
+    .on('mouseleave', function() {
+      d3.select(this).attr('fill-opacity', 0.6);
+      Utils.hideTooltip();
+    });
+
+  // Add labels
+  svg.selectAll('.label')
+    .data(chords.groups)
+    .join('text')
+    .attr('class', 'label')
+    .each(d => { d.angle = (d.startAngle + d.endAngle) / 2; })
+    .attr('dy', '.35em')
+    .attr('transform', d => `
+      rotate(${(d.angle * 180 / Math.PI - 90)})
+      translate(${outerRadius + 8})
+      ${d.angle > Math.PI ? 'rotate(180)' : ''}
+    `)
+    .attr('text-anchor', d => d.angle > Math.PI ? 'end' : 'start')
+    .attr('fill', Utils.colors.textSecondary)
+    .attr('font-size', '9px')
+    .text(d => Utils.truncate(topReasons[d.index], 10));
+}
+
+// ============================================
+// Contour Density Plot
+// ============================================
+function renderContourDensity() {
+  const container = document.getElementById('patterns-contour');
+  if (!container) return;
+
+  const { width, height } = Utils.getChartDimensions(container);
+  const margin = { top: 20, right: 20, bottom: 40, left: 50 };
+  const innerWidth = width - margin.left - margin.right;
+  const innerHeight = height - margin.top - margin.bottom;
+
+  const data = DATA.startups
+    .filter(s => s.fundingAmount > 0 && s.survivalYears > 0)
+    .map(s => [Math.log10(s.fundingAmount), s.survivalYears]);
+
+  const svg = d3.select(container)
+    .append('svg')
+    .attr('width', width)
+    .attr('height', height)
+    .append('g')
+    .attr('transform', `translate(${margin.left},${margin.top})`);
+
+  const x = d3.scaleLinear()
+    .domain(d3.extent(data, d => d[0]))
+    .range([0, innerWidth]);
+
+  const y = d3.scaleLinear()
+    .domain([0, d3.max(data, d => d[1])])
+    .range([innerHeight, 0]);
+
+  // Compute density contours
+  const density = d3.contourDensity()
+    .x(d => x(d[0]))
+    .y(d => y(d[1]))
+    .size([innerWidth, innerHeight])
+    .bandwidth(20)
+    .thresholds(10)
+    (data);
+
+  const color = d3.scaleSequential(d3.interpolateViridis)
+    .domain([0, d3.max(density, d => d.value)]);
+
+  // Draw contours
+  svg.selectAll('path')
+    .data(density)
+    .join('path')
+    .attr('d', d3.geoPath())
+    .attr('fill', d => color(d.value))
+    .attr('stroke', Utils.colors.bgMain)
+    .attr('stroke-width', 0.5)
+    .attr('fill-opacity', 0.8);
+
+  // Add points
+  svg.selectAll('circle')
+    .data(data.slice(0, 100))
+    .join('circle')
+    .attr('cx', d => x(d[0]))
+    .attr('cy', d => y(d[1]))
+    .attr('r', 2)
+    .attr('fill', Utils.colors.text)
+    .attr('fill-opacity', 0.3);
+
+  // Axes
+  const xAxis = svg.append('g')
+    .attr('transform', `translate(0,${innerHeight})`)
+    .call(d3.axisBottom(x).ticks(5).tickFormat(d => '$' + Math.pow(10, d).toFixed(0) + 'M'));
+  Utils.styleAxis(xAxis);
+
+  const yAxis = svg.append('g')
+    .call(d3.axisLeft(y).ticks(5));
+  Utils.styleAxis(yAxis);
+
+  svg.append('text')
+    .attr('x', innerWidth / 2)
+    .attr('y', innerHeight + 35)
+    .attr('text-anchor', 'middle')
+    .attr('fill', Utils.colors.textTertiary)
+    .attr('font-size', '10px')
+    .text('Funding (log scale)');
+}
+
+// ============================================
+// Beeswarm Plot
+// ============================================
+function renderBeeswarm() {
+  const container = document.getElementById('patterns-beeswarm');
+  if (!container) return;
+
+  const { width, height } = Utils.getChartDimensions(container);
+  const margin = { top: 20, right: 20, bottom: 40, left: 40 };
+  const innerWidth = width - margin.left - margin.right;
+  const innerHeight = height - margin.top - margin.bottom;
+
+  const data = DATA.startups.slice(0, 200).map(s => ({
+    survival: s.survivalYears,
+    reason: s.primaryReason,
+    name: s.name,
+    funding: s.fundingAmount
+  }));
+
+  const svg = d3.select(container)
+    .append('svg')
+    .attr('width', width)
+    .attr('height', height)
+    .append('g')
+    .attr('transform', `translate(${margin.left},${margin.top})`);
+
+  const x = d3.scaleLinear()
+    .domain([0, d3.max(data, d => d.survival) + 1])
+    .range([0, innerWidth]);
+
+  // Simple force simulation to avoid overlap
+  const simulation = d3.forceSimulation(data)
+    .force('x', d3.forceX(d => x(d.survival)).strength(1))
+    .force('y', d3.forceY(innerHeight / 2).strength(0.1))
+    .force('collide', d3.forceCollide(4))
+    .stop();
+
+  for (let i = 0; i < 120; ++i) simulation.tick();
+
+  svg.selectAll('circle')
+    .data(data)
+    .join('circle')
+    .attr('cx', d => d.x)
+    .attr('cy', d => Math.max(4, Math.min(innerHeight - 4, d.y)))
+    .attr('r', 3)
+    .attr('fill', d => Utils.getReasonColor(d.reason))
+    .attr('fill-opacity', 0.7)
+    .style('cursor', 'pointer')
+    .on('mouseenter', function(event, d) {
+      d3.select(this).attr('r', 5).attr('fill-opacity', 1);
+      const html = `
+        <div class="tooltip-title">${d.name}</div>
+        <div class="tooltip-row"><span class="tooltip-label">Survival</span><span class="tooltip-value">${d.survival} yrs</span></div>
+        <div class="tooltip-row"><span class="tooltip-label">Reason</span><span>${d.reason}</span></div>
+      `;
+      Utils.showTooltip(html, event.pageX, event.pageY);
+    })
+    .on('mouseleave', function() {
+      d3.select(this).attr('r', 3).attr('fill-opacity', 0.7);
+      Utils.hideTooltip();
+    });
+
+  // X axis
+  const xAxis = svg.append('g')
+    .attr('transform', `translate(0,${innerHeight})`)
+    .call(d3.axisBottom(x).ticks(10));
+  Utils.styleAxis(xAxis);
+
+  svg.append('text')
+    .attr('x', innerWidth / 2)
+    .attr('y', innerHeight + 35)
+    .attr('text-anchor', 'middle')
+    .attr('fill', Utils.colors.textTertiary)
+    .attr('font-size', '10px')
+    .text('Survival Years');
+}
+
+// ============================================
+// Slope Chart
+// ============================================
+function renderSlopeChart() {
+  const container = document.getElementById('patterns-slope');
+  if (!container) return;
+
+  const { width, height } = Utils.getChartDimensions(container);
+  const margin = { top: 30, right: 80, bottom: 30, left: 80 };
+  const innerWidth = width - margin.left - margin.right;
+  const innerHeight = height - margin.top - margin.bottom;
+
+  const decades = ['2000s', '2010s', '2020s'];
+
+  // Get rankings per decade
+  const getRankings = (decadeStart) => {
+    const counts = {};
+    DATA.startups.forEach(s => {
+      if (s.failureDecade === decadeStart) {
+        const reason = s.primaryReason;
+        counts[reason] = (counts[reason] || 0) + 1;
+      }
+    });
+    return Object.entries(counts)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 6)
+      .map((d, i) => ({ reason: d[0], rank: i + 1, count: d[1] }));
+  };
+
+  const data2000 = getRankings(2000);
+  const data2010 = getRankings(2010);
+  const data2020 = getRankings(2020);
+
+  // Combine all reasons
+  const allReasons = [...new Set([
+    ...data2000.map(d => d.reason),
+    ...data2010.map(d => d.reason),
+    ...data2020.map(d => d.reason)
+  ])];
+
+  const svg = d3.select(container)
+    .append('svg')
+    .attr('width', width)
+    .attr('height', height)
+    .append('g')
+    .attr('transform', `translate(${margin.left},${margin.top})`);
+
+  const x = d3.scalePoint()
+    .domain(decades)
+    .range([0, innerWidth]);
+
+  const y = d3.scaleLinear()
+    .domain([1, 7])
+    .range([0, innerHeight]);
+
+  // Draw lines for each reason
+  allReasons.forEach(reason => {
+    const r2000 = data2000.find(d => d.reason === reason);
+    const r2010 = data2010.find(d => d.reason === reason);
+    const r2020 = data2020.find(d => d.reason === reason);
+
+    const points = [];
+    if (r2000) points.push({ x: x('2000s'), y: y(r2000.rank) });
+    if (r2010) points.push({ x: x('2010s'), y: y(r2010.rank) });
+    if (r2020) points.push({ x: x('2020s'), y: y(r2020.rank) });
+
+    if (points.length > 1) {
+      svg.append('path')
+        .datum(points)
+        .attr('d', d3.line().x(d => d.x).y(d => d.y))
+        .attr('fill', 'none')
+        .attr('stroke', Utils.getReasonColor(reason))
+        .attr('stroke-width', 2)
+        .attr('stroke-opacity', 0.7);
+
+      points.forEach(p => {
+        svg.append('circle')
+          .attr('cx', p.x)
+          .attr('cy', p.y)
+          .attr('r', 5)
+          .attr('fill', Utils.getReasonColor(reason));
+      });
+    }
+  });
+
+  // Labels at start
+  data2000.forEach(d => {
+    svg.append('text')
+      .attr('x', -8)
+      .attr('y', y(d.rank))
+      .attr('text-anchor', 'end')
+      .attr('dominant-baseline', 'middle')
+      .attr('fill', Utils.getReasonColor(d.reason))
+      .attr('font-size', '9px')
+      .text(Utils.truncate(d.reason, 10));
+  });
+
+  // Labels at end
+  data2020.forEach(d => {
+    svg.append('text')
+      .attr('x', innerWidth + 8)
+      .attr('y', y(d.rank))
+      .attr('text-anchor', 'start')
+      .attr('dominant-baseline', 'middle')
+      .attr('fill', Utils.getReasonColor(d.reason))
+      .attr('font-size', '9px')
+      .text(Utils.truncate(d.reason, 10));
+  });
+
+  // Decade labels
+  decades.forEach(d => {
+    svg.append('text')
+      .attr('x', x(d))
+      .attr('y', -10)
+      .attr('text-anchor', 'middle')
+      .attr('fill', Utils.colors.textSecondary)
+      .attr('font-size', '11px')
+      .attr('font-weight', '500')
+      .text(d);
+  });
 }

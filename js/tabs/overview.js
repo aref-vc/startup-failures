@@ -10,6 +10,10 @@ function initOverview() {
   renderFailureTreemap();
   renderCoOccurrenceHeatmap();
   renderYearlyTimeline();
+  renderSankeyFlow();
+  renderParallelCoordinates();
+  renderBubbleMatrix();
+  renderViolinPlot();
 }
 
 // ============================================
@@ -894,4 +898,447 @@ function renderReasonCountDist() {
     .attr('fill', Utils.colors.textSecondary)
     .attr('font-size', '11px')
     .text(`Avg: ${avgReasons} reasons`);
+}
+
+// ============================================
+// Sankey Flow Diagram
+// ============================================
+function renderSankeyFlow() {
+  const container = document.getElementById('overview-sankey');
+  if (!container) return;
+
+  const { width, height } = Utils.getChartDimensions(container);
+  const margin = { top: 10, right: 10, bottom: 10, left: 10 };
+  const innerWidth = width - margin.left - margin.right;
+  const innerHeight = height - margin.top - margin.bottom;
+
+  // Build nodes and links for Sankey
+  const tiers = ['Unfunded', 'Seed', 'Series A', 'Series B+'];
+  const reasons = ['Giants', 'Competition', 'No Budget', 'Poor Market Fit', 'Other'];
+  const survivalBuckets = ['<3 yrs', '3-7 yrs', '7+ yrs'];
+
+  const nodes = [
+    ...tiers.map(t => ({ name: t, category: 'tier' })),
+    ...reasons.map(r => ({ name: r, category: 'reason' })),
+    ...survivalBuckets.map(s => ({ name: s, category: 'survival' }))
+  ];
+
+  const nodeIndex = {};
+  nodes.forEach((n, i) => nodeIndex[n.name] = i);
+
+  // Build links from data
+  const linkMap = {};
+  DATA.startups.forEach(s => {
+    // Tier category
+    let tier = 'Unfunded';
+    if (s.fundingAmount > 0 && s.fundingAmount < 10) tier = 'Seed';
+    else if (s.fundingAmount >= 10 && s.fundingAmount < 50) tier = 'Series A';
+    else if (s.fundingAmount >= 50) tier = 'Series B+';
+
+    // Primary reason
+    let reason = s.primaryReason || 'Other';
+    if (!reasons.includes(reason)) reason = 'Other';
+
+    // Survival bucket
+    let survival = '<3 yrs';
+    if (s.survivalYears >= 3 && s.survivalYears < 7) survival = '3-7 yrs';
+    else if (s.survivalYears >= 7) survival = '7+ yrs';
+
+    // Tier -> Reason
+    const key1 = `${tier}->${reason}`;
+    linkMap[key1] = (linkMap[key1] || 0) + 1;
+
+    // Reason -> Survival
+    const key2 = `${reason}->${survival}`;
+    linkMap[key2] = (linkMap[key2] || 0) + 1;
+  });
+
+  const links = Object.entries(linkMap).map(([key, value]) => {
+    const [source, target] = key.split('->');
+    return { source: nodeIndex[source], target: nodeIndex[target], value };
+  }).filter(l => l.source !== undefined && l.target !== undefined);
+
+  // Simple Sankey-like visualization using paths
+  const svg = d3.select(container)
+    .append('svg')
+    .attr('width', width)
+    .attr('height', height)
+    .append('g')
+    .attr('transform', `translate(${margin.left},${margin.top})`);
+
+  // Position columns
+  const colWidth = innerWidth / 3;
+  const tierY = d3.scaleBand().domain(tiers).range([0, innerHeight]).padding(0.1);
+  const reasonY = d3.scaleBand().domain(reasons).range([0, innerHeight]).padding(0.1);
+  const survivalY = d3.scaleBand().domain(survivalBuckets).range([0, innerHeight]).padding(0.1);
+
+  // Draw tier nodes
+  svg.selectAll('.tier-node')
+    .data(tiers)
+    .join('rect')
+    .attr('class', 'tier-node')
+    .attr('x', 0)
+    .attr('y', d => tierY(d))
+    .attr('width', 15)
+    .attr('height', tierY.bandwidth())
+    .attr('fill', Utils.colors.cyan)
+    .attr('rx', 3);
+
+  // Draw reason nodes
+  svg.selectAll('.reason-node')
+    .data(reasons)
+    .join('rect')
+    .attr('class', 'reason-node')
+    .attr('x', colWidth - 7.5)
+    .attr('y', d => reasonY(d))
+    .attr('width', 15)
+    .attr('height', reasonY.bandwidth())
+    .attr('fill', Utils.colors.coral)
+    .attr('rx', 3);
+
+  // Draw survival nodes
+  svg.selectAll('.survival-node')
+    .data(survivalBuckets)
+    .join('rect')
+    .attr('class', 'survival-node')
+    .attr('x', innerWidth - 15)
+    .attr('y', d => survivalY(d))
+    .attr('width', 15)
+    .attr('height', survivalY.bandwidth())
+    .attr('fill', Utils.colors.emerald)
+    .attr('rx', 3);
+
+  // Draw simplified flow paths
+  const maxFlow = d3.max(links, l => l.value);
+  links.forEach(link => {
+    const sourceNode = nodes[link.source];
+    const targetNode = nodes[link.target];
+
+    let x1, y1, x2, y2;
+    if (sourceNode.category === 'tier') {
+      x1 = 15;
+      y1 = tierY(sourceNode.name) + tierY.bandwidth() / 2;
+      x2 = colWidth - 7.5;
+      y2 = reasonY(targetNode.name) + reasonY.bandwidth() / 2;
+    } else {
+      x1 = colWidth + 7.5;
+      y1 = reasonY(sourceNode.name) + reasonY.bandwidth() / 2;
+      x2 = innerWidth - 15;
+      y2 = survivalY(targetNode.name) + survivalY.bandwidth() / 2;
+    }
+
+    svg.append('path')
+      .attr('d', `M${x1},${y1} C${(x1+x2)/2},${y1} ${(x1+x2)/2},${y2} ${x2},${y2}`)
+      .attr('fill', 'none')
+      .attr('stroke', sourceNode.category === 'tier' ? Utils.colors.cyan : Utils.colors.coral)
+      .attr('stroke-opacity', 0.3)
+      .attr('stroke-width', Math.max(1, (link.value / maxFlow) * 15));
+  });
+
+  // Labels
+  svg.selectAll('.tier-label')
+    .data(tiers)
+    .join('text')
+    .attr('x', 20)
+    .attr('y', d => tierY(d) + tierY.bandwidth() / 2)
+    .attr('dominant-baseline', 'middle')
+    .attr('fill', Utils.colors.textSecondary)
+    .attr('font-size', '9px')
+    .text(d => d);
+
+  svg.selectAll('.reason-label')
+    .data(reasons)
+    .join('text')
+    .attr('x', colWidth + 12)
+    .attr('y', d => reasonY(d) + reasonY.bandwidth() / 2)
+    .attr('dominant-baseline', 'middle')
+    .attr('fill', Utils.colors.textSecondary)
+    .attr('font-size', '9px')
+    .text(d => Utils.truncate(d, 10));
+
+  svg.selectAll('.survival-label')
+    .data(survivalBuckets)
+    .join('text')
+    .attr('x', innerWidth - 20)
+    .attr('y', d => survivalY(d) + survivalY.bandwidth() / 2)
+    .attr('dominant-baseline', 'middle')
+    .attr('text-anchor', 'end')
+    .attr('fill', Utils.colors.textSecondary)
+    .attr('font-size', '9px')
+    .text(d => d);
+}
+
+// ============================================
+// Parallel Coordinates
+// ============================================
+function renderParallelCoordinates() {
+  const container = document.getElementById('overview-parallel');
+  if (!container) return;
+
+  const { width, height } = Utils.getChartDimensions(container);
+  const margin = { top: 30, right: 20, bottom: 20, left: 20 };
+  const innerWidth = width - margin.left - margin.right;
+  const innerHeight = height - margin.top - margin.bottom;
+
+  const dimensions = ['Funding', 'Survival', 'Reasons', 'Sector'];
+
+  const data = DATA.startups.slice(0, 150).map(s => ({
+    Funding: Math.log10(s.fundingAmount + 1),
+    Survival: s.survivalYears,
+    Reasons: s.totalFailureReasons,
+    Sector: Object.keys(DATA.bySector).indexOf(s.sector),
+    sectorName: s.sector,
+    name: s.name
+  }));
+
+  const svg = d3.select(container)
+    .append('svg')
+    .attr('width', width)
+    .attr('height', height)
+    .append('g')
+    .attr('transform', `translate(${margin.left},${margin.top})`);
+
+  // Scales for each dimension
+  const y = {};
+  dimensions.forEach(dim => {
+    y[dim] = d3.scaleLinear()
+      .domain(d3.extent(data, d => d[dim]))
+      .range([innerHeight, 0]);
+  });
+
+  const x = d3.scalePoint()
+    .domain(dimensions)
+    .range([0, innerWidth]);
+
+  // Draw lines
+  const line = d3.line();
+
+  svg.selectAll('.dataline')
+    .data(data)
+    .join('path')
+    .attr('class', 'dataline')
+    .attr('d', d => line(dimensions.map(dim => [x(dim), y[dim](d[dim])])))
+    .attr('fill', 'none')
+    .attr('stroke', d => Utils.getSectorColor(d.sectorName))
+    .attr('stroke-opacity', 0.3)
+    .attr('stroke-width', 1)
+    .style('cursor', 'pointer')
+    .on('mouseenter', function(event, d) {
+      d3.select(this).attr('stroke-opacity', 1).attr('stroke-width', 2);
+      const html = `
+        <div class="tooltip-title">${d.name}</div>
+        <div class="tooltip-row"><span class="tooltip-label">Sector</span><span>${d.sectorName}</span></div>
+        <div class="tooltip-row"><span class="tooltip-label">Funding</span><span>$${Math.pow(10, d.Funding).toFixed(0)}M</span></div>
+        <div class="tooltip-row"><span class="tooltip-label">Survival</span><span>${d.Survival} yrs</span></div>
+      `;
+      Utils.showTooltip(html, event.pageX, event.pageY);
+    })
+    .on('mouseleave', function() {
+      d3.select(this).attr('stroke-opacity', 0.3).attr('stroke-width', 1);
+      Utils.hideTooltip();
+    });
+
+  // Draw axes
+  dimensions.forEach(dim => {
+    const axis = svg.append('g')
+      .attr('transform', `translate(${x(dim)},0)`);
+
+    axis.call(d3.axisLeft(y[dim]).ticks(5));
+    axis.selectAll('text').attr('fill', Utils.colors.textTertiary).attr('font-size', '8px');
+    axis.selectAll('line, path').attr('stroke', Utils.colors.border);
+
+    axis.append('text')
+      .attr('y', -10)
+      .attr('text-anchor', 'middle')
+      .attr('fill', Utils.colors.textSecondary)
+      .attr('font-size', '10px')
+      .text(dim);
+  });
+}
+
+// ============================================
+// Bubble Matrix (Sector × Decade)
+// ============================================
+function renderBubbleMatrix() {
+  const container = document.getElementById('overview-bubble-matrix');
+  if (!container) return;
+
+  const { width, height } = Utils.getChartDimensions(container);
+  const margin = { top: 40, right: 20, bottom: 20, left: 100 };
+  const innerWidth = width - margin.left - margin.right;
+  const innerHeight = height - margin.top - margin.bottom;
+
+  const sectors = Object.keys(DATA.bySector);
+  const decades = ['1990', '2000', '2010', '2020'];
+
+  // Build matrix data
+  const matrixData = [];
+  sectors.forEach(sector => {
+    decades.forEach(decade => {
+      const startups = DATA.startups.filter(s =>
+        s.sector === sector && s.failureDecade === parseInt(decade)
+      );
+      matrixData.push({
+        sector,
+        decade,
+        count: startups.length,
+        avgFunding: startups.length ? d3.mean(startups, s => s.fundingAmount) : 0
+      });
+    });
+  });
+
+  const svg = d3.select(container)
+    .append('svg')
+    .attr('width', width)
+    .attr('height', height)
+    .append('g')
+    .attr('transform', `translate(${margin.left},${margin.top})`);
+
+  const x = d3.scaleBand().domain(decades).range([0, innerWidth]).padding(0.1);
+  const y = d3.scaleBand().domain(sectors).range([0, innerHeight]).padding(0.1);
+  const r = d3.scaleSqrt().domain([0, d3.max(matrixData, d => d.count)]).range([0, Math.min(x.bandwidth(), y.bandwidth()) / 2 - 2]);
+  const color = d3.scaleSequential().domain([0, d3.max(matrixData, d => d.avgFunding)]).interpolator(d3.interpolate(Utils.colors.bgElevated, Utils.colors.amber));
+
+  // Draw bubbles
+  svg.selectAll('circle')
+    .data(matrixData)
+    .join('circle')
+    .attr('cx', d => x(d.decade) + x.bandwidth() / 2)
+    .attr('cy', d => y(d.sector) + y.bandwidth() / 2)
+    .attr('r', d => r(d.count))
+    .attr('fill', d => color(d.avgFunding))
+    .attr('stroke', Utils.colors.border)
+    .attr('stroke-width', 1)
+    .style('cursor', 'pointer')
+    .on('mouseenter', function(event, d) {
+      d3.select(this).attr('stroke', Utils.colors.lime).attr('stroke-width', 2);
+      const html = `
+        <div class="tooltip-title">${d.sector} (${d.decade}s)</div>
+        <div class="tooltip-row"><span class="tooltip-label">Failures</span><span class="tooltip-value">${d.count}</span></div>
+        <div class="tooltip-row"><span class="tooltip-label">Avg Funding</span><span>$${d.avgFunding.toFixed(0)}M</span></div>
+      `;
+      Utils.showTooltip(html, event.pageX, event.pageY);
+    })
+    .on('mouseleave', function() {
+      d3.select(this).attr('stroke', Utils.colors.border).attr('stroke-width', 1);
+      Utils.hideTooltip();
+    });
+
+  // X axis
+  svg.append('g')
+    .selectAll('text')
+    .data(decades)
+    .join('text')
+    .attr('x', d => x(d) + x.bandwidth() / 2)
+    .attr('y', -10)
+    .attr('text-anchor', 'middle')
+    .attr('fill', Utils.colors.textSecondary)
+    .attr('font-size', '10px')
+    .text(d => d + 's');
+
+  // Y axis
+  svg.append('g')
+    .selectAll('text')
+    .data(sectors)
+    .join('text')
+    .attr('x', -8)
+    .attr('y', d => y(d) + y.bandwidth() / 2)
+    .attr('text-anchor', 'end')
+    .attr('dominant-baseline', 'middle')
+    .attr('fill', Utils.colors.textSecondary)
+    .attr('font-size', '9px')
+    .text(d => Utils.truncate(d, 15));
+}
+
+// ============================================
+// Violin Plot (Survival by Primary Reason)
+// ============================================
+function renderViolinPlot() {
+  const container = document.getElementById('overview-violin');
+  if (!container) return;
+
+  const { width, height } = Utils.getChartDimensions(container);
+  const margin = { top: 20, right: 20, bottom: 60, left: 40 };
+  const innerWidth = width - margin.left - margin.right;
+  const innerHeight = height - margin.top - margin.bottom;
+
+  // Get top 6 reasons
+  const topReasons = Object.entries(DATA.byReason)
+    .sort((a, b) => b[1].count - a[1].count)
+    .slice(0, 6)
+    .map(d => d[0]);
+
+  const svg = d3.select(container)
+    .append('svg')
+    .attr('width', width)
+    .attr('height', height)
+    .append('g')
+    .attr('transform', `translate(${margin.left},${margin.top})`);
+
+  const x = d3.scaleBand().domain(topReasons).range([0, innerWidth]).padding(0.2);
+  const y = d3.scaleLinear().domain([0, 25]).range([innerHeight, 0]);
+
+  // For each reason, create a violin shape
+  topReasons.forEach(reason => {
+    const values = DATA.startups
+      .filter(s => s.primaryReason === reason)
+      .map(s => s.survivalYears);
+
+    if (values.length < 3) return;
+
+    // Create histogram bins for violin shape
+    const bins = d3.bin().domain([0, 25]).thresholds(15)(values);
+    const maxBinLength = d3.max(bins, b => b.length);
+    const violinWidth = x.bandwidth() / 2;
+
+    // Area generator for violin
+    const area = d3.area()
+      .x0(d => x(reason) + x.bandwidth() / 2 - (d.length / maxBinLength) * violinWidth)
+      .x1(d => x(reason) + x.bandwidth() / 2 + (d.length / maxBinLength) * violinWidth)
+      .y(d => y((d.x0 + d.x1) / 2))
+      .curve(d3.curveCatmullRom);
+
+    svg.append('path')
+      .datum(bins)
+      .attr('d', area)
+      .attr('fill', Utils.getReasonColor(reason))
+      .attr('fill-opacity', 0.7)
+      .attr('stroke', Utils.getReasonColor(reason))
+      .attr('stroke-width', 1);
+
+    // Median line
+    const median = d3.median(values);
+    svg.append('line')
+      .attr('x1', x(reason) + 5)
+      .attr('x2', x(reason) + x.bandwidth() - 5)
+      .attr('y1', y(median))
+      .attr('y2', y(median))
+      .attr('stroke', Utils.colors.bgMain)
+      .attr('stroke-width', 2);
+  });
+
+  // X axis
+  const xAxis = svg.append('g')
+    .attr('transform', `translate(0,${innerHeight})`)
+    .call(d3.axisBottom(x));
+  xAxis.selectAll('text')
+    .attr('transform', 'rotate(-35)')
+    .attr('text-anchor', 'end')
+    .attr('fill', Utils.colors.textTertiary)
+    .attr('font-size', '9px')
+    .text(d => Utils.truncate(d, 12));
+  xAxis.selectAll('line, path').attr('stroke', Utils.colors.border);
+
+  // Y axis
+  const yAxis = svg.append('g').call(d3.axisLeft(y).ticks(5));
+  Utils.styleAxis(yAxis);
+
+  svg.append('text')
+    .attr('transform', 'rotate(-90)')
+    .attr('x', -innerHeight / 2)
+    .attr('y', -30)
+    .attr('text-anchor', 'middle')
+    .attr('fill', Utils.colors.textTertiary)
+    .attr('font-size', '10px')
+    .text('Survival Years');
 }
