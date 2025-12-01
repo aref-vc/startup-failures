@@ -1,0 +1,599 @@
+/* Startup Failures Dashboard - Global Styles */
+
+/* ============================================
+   CSS Variables (Electric Dark Theme)
+   ============================================ */
+:root {
+  --font-family: 'Berkeley Mono', 'SF Mono', 'Monaco', monospace;
+
+  /* Backgrounds */
+  --bg-main: #10100E;
+  --bg-main-rgb: 16, 16, 14;
+  --bg-elevated: #1A1A18;
+  --bg-elevated-rgb: 26, 26, 24;
+  --bg-accent: #242422;
+  --bg-accent-rgb: 36, 36, 34;
+
+  /* Text Colors */
+  --text-primary: #FFFFE3;
+  --text-primary-rgb: 255, 255, 227;
+  --text-secondary: #E6E6CE;
+  --text-secondary-rgb: 230, 230, 206;
+  --text-tertiary: #B3B3A3;
+  --text-tertiary-rgb: 179, 179, 163;
+
+  /* UI Colors */
+  --lime: #BEFF00;
+  --lime-rgb: 190, 255, 0;
+  --cyan: #00BAFE;
+  --cyan-rgb: 0, 186, 254;
+  --amber: #FFC000;
+  --amber-rgb: 255, 192, 0;
+  --emerald: #00DE71;
+  --emerald-rgb: 0, 222, 113;
+  --coral: #F04E50;
+  --coral-rgb: 240, 78, 80;
+  --purple: #9B59B6;
+  --purple-rgb: 155, 89, 182;
+
+  /* Borders */
+  --border: #2A2A28;
+  --border-rgb: 42, 42, 40;
+  --border-light: #3A3A38;
+  --border-light-rgb: 58, 58, 56;
+
+  /* Spacing */
+  --header-height: 60px;
+  --gap: 16px;
+  --gap-lg: 24px;
+}
+
+/* ============================================
+   Reset & Base
+   ============================================ */
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  font-size: 16px;
+}
+
+body {
+  font-family: var(--font-family);
+  background: var(--bg-main);
+  color: var(--text-primary);
+  line-height: 1.5;
+  min-height: 100vh;
+  overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ============================================
+   Typography
+   ============================================ */
+h1, h2, h3, h4 {
+  font-weight: 500;
+  line-height: 1.2;
+}
+
+h1 {
+  font-size: 1.5rem;
+  letter-spacing: -0.01em;
+}
+
+h2 {
+  font-size: 1.125rem;
+  color: var(--text-secondary);
+}
+
+h3 {
+  font-size: 0.875rem;
+  color: var(--text-tertiary);
+}
+
+p {
+  color: var(--text-secondary);
+  font-size: 0.8125rem;
+}
+
+.label {
+  font-size: 0.6875rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-tertiary);
+}
+
+/* ============================================
+   Layout - Full Screen Dashboard
+   ============================================ */
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow: hidden;
+}
+
+/* ============================================
+   Header with Tab Navigation
+   ============================================ */
+.header {
+  height: var(--header-height);
+  background: rgba(var(--bg-main-rgb), 0.95);
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 var(--gap-lg);
+  flex-shrink: 0;
+}
+
+.logo {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.logo-icon {
+  width: 28px;
+  height: 28px;
+  background: var(--coral);
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.875rem;
+}
+
+.logo-text {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.logo-text span {
+  color: var(--coral);
+}
+
+/* Tab Navigation */
+.tab-nav {
+  display: flex;
+  gap: 4px;
+}
+
+.tab-btn {
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  padding: 8px 16px;
+  font-family: var(--font-family);
+  font-size: 0.75rem;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.tab-btn:hover {
+  color: var(--text-secondary);
+  background: var(--bg-elevated);
+}
+
+.tab-btn.active {
+  color: var(--lime);
+  background: var(--bg-elevated);
+  border-color: var(--border);
+}
+
+.header-stats {
+  display: flex;
+  gap: var(--gap-lg);
+  font-size: 0.75rem;
+}
+
+.header-stat {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.header-stat-value {
+  color: var(--lime);
+  font-weight: 500;
+}
+
+.header-stat-label {
+  color: var(--text-tertiary);
+}
+
+/* ============================================
+   Main Content Area
+   ============================================ */
+.main {
+  flex: 1;
+  overflow: hidden;
+  position: relative;
+}
+
+/* Tab Panels */
+.tab-panel {
+  display: none;
+  height: 100%;
+  padding: var(--gap);
+  overflow: auto;
+}
+
+.tab-panel.active {
+  display: block;
+}
+
+/* ============================================
+   2x2 Dashboard Grid
+   ============================================ */
+.dashboard-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 1fr 1fr;
+  gap: var(--gap);
+  height: 100%;
+  min-height: 0;
+}
+
+/* Individual Quadrant */
+.quadrant {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: var(--gap);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.quadrant-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--gap);
+  flex-shrink: 0;
+}
+
+.quadrant-title {
+  font-size: 0.75rem;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-secondary);
+}
+
+.quadrant-subtitle {
+  font-size: 0.6875rem;
+  color: var(--text-tertiary);
+}
+
+.quadrant-content {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+}
+
+/* ============================================
+   Stat Cards (for hero stats in quadrant)
+   ============================================ */
+.stat-row {
+  display: flex;
+  gap: var(--gap);
+  flex-wrap: wrap;
+}
+
+.stat-card {
+  background: var(--bg-accent);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 12px 16px;
+  flex: 1;
+  min-width: 120px;
+}
+
+.stat-card-value {
+  font-size: 1.5rem;
+  font-weight: 500;
+  color: var(--lime);
+  line-height: 1;
+  margin-bottom: 4px;
+}
+
+.stat-card-label {
+  font-size: 0.6875rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-tertiary);
+}
+
+.stat-card.coral .stat-card-value { color: var(--coral); }
+.stat-card.cyan .stat-card-value { color: var(--cyan); }
+.stat-card.amber .stat-card-value { color: var(--amber); }
+.stat-card.emerald .stat-card-value { color: var(--emerald); }
+
+/* ============================================
+   Chart Container
+   ============================================ */
+.chart-container {
+  width: 100%;
+  height: 100%;
+  position: relative;
+}
+
+.chart-container svg {
+  width: 100%;
+  height: 100%;
+}
+
+/* Force font on SVG */
+svg text {
+  font-family: var(--font-family) !important;
+}
+
+/* ============================================
+   Tooltips
+   ============================================ */
+.tooltip {
+  position: fixed;
+  pointer-events: none;
+  background: var(--bg-accent);
+  border: 1px solid var(--border-light);
+  border-radius: 6px;
+  padding: 10px 14px;
+  font-size: 0.75rem;
+  color: var(--text-primary);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+  z-index: 1001;
+  opacity: 0;
+  transition: opacity 0.15s;
+  max-width: 280px;
+}
+
+.tooltip.visible {
+  opacity: 1;
+}
+
+.tooltip-title {
+  font-weight: 500;
+  margin-bottom: 4px;
+  color: var(--text-primary);
+}
+
+.tooltip-value {
+  color: var(--lime);
+  font-weight: 500;
+}
+
+.tooltip-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 2px;
+}
+
+.tooltip-label {
+  color: var(--text-tertiary);
+}
+
+/* ============================================
+   Legend
+   ============================================ */
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 8px 0;
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.6875rem;
+  color: var(--text-tertiary);
+}
+
+.legend-color {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+}
+
+/* ============================================
+   Chips / Tags
+   ============================================ */
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  background: var(--bg-accent);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-size: 0.6875rem;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.chip:hover {
+  border-color: var(--border-light);
+  background: var(--bg-elevated);
+}
+
+.chip.active {
+  border-color: var(--lime);
+  color: var(--lime);
+}
+
+.chip-count {
+  color: var(--text-tertiary);
+}
+
+/* ============================================
+   List Items
+   ============================================ */
+.list-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  background: var(--bg-accent);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  margin-bottom: 8px;
+  transition: all 0.2s;
+}
+
+.list-item:hover {
+  border-color: var(--border-light);
+  transform: translateX(2px);
+}
+
+.list-rank {
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--text-tertiary);
+  width: 24px;
+}
+
+.list-name {
+  flex: 1;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.list-value {
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--lime);
+}
+
+.list-bar {
+  height: 4px;
+  background: var(--lime);
+  border-radius: 2px;
+  opacity: 0.6;
+}
+
+/* ============================================
+   Scrollbar
+   ============================================ */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--bg-main);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border-light);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-tertiary);
+}
+
+/* ============================================
+   Animations
+   ============================================ */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes scaleIn {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.fade-in {
+  animation: fadeIn 0.3s ease-out;
+}
+
+.fade-in-up {
+  animation: fadeInUp 0.4s ease-out;
+}
+
+/* Stagger children */
+.stagger > *:nth-child(1) { animation-delay: 0.05s; }
+.stagger > *:nth-child(2) { animation-delay: 0.1s; }
+.stagger > *:nth-child(3) { animation-delay: 0.15s; }
+.stagger > *:nth-child(4) { animation-delay: 0.2s; }
+
+/* ============================================
+   Sector Colors
+   ============================================ */
+.sector-finance { --sector-color: var(--emerald); }
+.sector-food { --sector-color: var(--amber); }
+.sector-health { --sector-color: var(--coral); }
+.sector-manufacturing { --sector-color: var(--purple); }
+.sector-retail { --sector-color: var(--cyan); }
+.sector-info { --sector-color: var(--lime); }
+
+/* ============================================
+   Responsive
+   ============================================ */
+@media (max-width: 1200px) {
+  .header-stats {
+    display: none;
+  }
+}
+
+@media (max-width: 900px) {
+  .dashboard-grid {
+    grid-template-columns: 1fr;
+    grid-template-rows: repeat(4, minmax(300px, 1fr));
+  }
+
+  .tab-btn {
+    padding: 6px 12px;
+    font-size: 0.6875rem;
+  }
+}
+
+@media (max-width: 600px) {
+  .logo-text {
+    display: none;
+  }
+
+  .tab-nav {
+    gap: 2px;
+  }
+
+  .tab-btn {
+    padding: 6px 8px;
+  }
+}

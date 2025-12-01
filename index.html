@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Startup Failures - Data Dashboard</title>
+
+  <!-- Google Fonts - Berkeley Mono fallback -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+
+  <style>
+    /* Berkeley Mono fallback to JetBrains Mono */
+    @font-face {
+      font-family: 'Berkeley Mono';
+      src: local('Berkeley Mono'), local('JetBrains Mono');
+    }
+  </style>
+
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+  <div class="app">
+    <!-- Header with Tab Navigation -->
+    <header class="header">
+      <div class="logo">
+        <div class="logo-icon">X</div>
+        <div class="logo-text">Startup <span>Failures</span></div>
+      </div>
+
+      <nav class="tab-nav">
+        <button class="tab-btn active" data-tab="overview">Overview</button>
+        <button class="tab-btn" data-tab="sectors">Sectors</button>
+        <button class="tab-btn" data-tab="funding">Funding</button>
+        <button class="tab-btn" data-tab="timeline">Timeline</button>
+      </nav>
+
+      <div class="header-stats">
+        <div class="header-stat">
+          <span class="header-stat-value" id="header-total">403</span>
+          <span class="header-stat-label">Startups</span>
+        </div>
+        <div class="header-stat">
+          <span class="header-stat-value" id="header-funding">$57B</span>
+          <span class="header-stat-label">Lost</span>
+        </div>
+      </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="main">
+      <!-- Tab 1: Overview -->
+      <div id="overview" class="tab-panel active">
+        <div class="dashboard-grid">
+          <!-- Top Left: Hero Stats -->
+          <div class="quadrant">
+            <div class="quadrant-header">
+              <div class="quadrant-title">Key Metrics</div>
+            </div>
+            <div class="quadrant-content" id="overview-stats"></div>
+          </div>
+
+          <!-- Top Right: Failure Reasons Treemap -->
+          <div class="quadrant">
+            <div class="quadrant-header">
+              <div class="quadrant-title">Failure Reasons</div>
+              <div class="quadrant-subtitle">by frequency</div>
+            </div>
+            <div class="quadrant-content">
+              <div class="chart-container" id="overview-treemap"></div>
+            </div>
+          </div>
+
+          <!-- Bottom Left: Co-occurrence Heatmap -->
+          <div class="quadrant">
+            <div class="quadrant-header">
+              <div class="quadrant-title">Reason Co-occurrence</div>
+              <div class="quadrant-subtitle">which reasons appear together</div>
+            </div>
+            <div class="quadrant-content">
+              <div class="chart-container" id="overview-heatmap"></div>
+            </div>
+          </div>
+
+          <!-- Bottom Right: Timeline Sparkline -->
+          <div class="quadrant">
+            <div class="quadrant-header">
+              <div class="quadrant-title">Failures by Year</div>
+              <div class="quadrant-subtitle">1984-2024</div>
+            </div>
+            <div class="quadrant-content">
+              <div class="chart-container" id="overview-timeline"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tab 2: Sectors -->
+      <div id="sectors" class="tab-panel">
+        <div class="dashboard-grid">
+          <!-- Top Left: Sector Summary -->
+          <div class="quadrant">
+            <div class="quadrant-header">
+              <div class="quadrant-title">Sectors Overview</div>
+            </div>
+            <div class="quadrant-content" id="sectors-summary"></div>
+          </div>
+
+          <!-- Top Right: Radar Chart -->
+          <div class="quadrant">
+            <div class="quadrant-header">
+              <div class="quadrant-title">Failure Profiles</div>
+              <div class="quadrant-subtitle">reasons by sector</div>
+            </div>
+            <div class="quadrant-content">
+              <div class="chart-container" id="sectors-radar"></div>
+            </div>
+          </div>
+
+          <!-- Bottom Left: Survival by Sector -->
+          <div class="quadrant">
+            <div class="quadrant-header">
+              <div class="quadrant-title">Survival Duration</div>
+              <div class="quadrant-subtitle">years by sector</div>
+            </div>
+            <div class="quadrant-content">
+              <div class="chart-container" id="sectors-survival"></div>
+            </div>
+          </div>
+
+          <!-- Bottom Right: Stacked Bar -->
+          <div class="quadrant">
+            <div class="quadrant-header">
+              <div class="quadrant-title">Failure Distribution</div>
+              <div class="quadrant-subtitle">by sector</div>
+            </div>
+            <div class="quadrant-content">
+              <div class="chart-container" id="sectors-bars"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tab 3: Funding -->
+      <div id="funding" class="tab-panel">
+        <div class="dashboard-grid">
+          <!-- Top Left: Funding Tiers -->
+          <div class="quadrant">
+            <div class="quadrant-header">
+              <div class="quadrant-title">Funding Tiers</div>
+            </div>
+            <div class="quadrant-content" id="funding-tiers"></div>
+          </div>
+
+          <!-- Top Right: Scatter Plot -->
+          <div class="quadrant">
+            <div class="quadrant-header">
+              <div class="quadrant-title">Funding vs Survival</div>
+              <div class="quadrant-subtitle">does money buy time?</div>
+            </div>
+            <div class="quadrant-content">
+              <div class="chart-container" id="funding-scatter"></div>
+            </div>
+          </div>
+
+          <!-- Bottom Left: Top Funded -->
+          <div class="quadrant">
+            <div class="quadrant-header">
+              <div class="quadrant-title">Top Funded Failures</div>
+              <div class="quadrant-subtitle">most capital lost</div>
+            </div>
+            <div class="quadrant-content" id="funding-top"></div>
+          </div>
+
+          <!-- Bottom Right: Funding by Year -->
+          <div class="quadrant">
+            <div class="quadrant-header">
+              <div class="quadrant-title">Capital Lost by Year</div>
+              <div class="quadrant-subtitle">cumulative</div>
+            </div>
+            <div class="quadrant-content">
+              <div class="chart-container" id="funding-yearly"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tab 4: Timeline -->
+      <div id="timeline" class="tab-panel">
+        <div class="dashboard-grid">
+          <!-- Top Left: Timeline -->
+          <div class="quadrant">
+            <div class="quadrant-header">
+              <div class="quadrant-title">Failure Timeline</div>
+              <div class="quadrant-subtitle">1984-2024</div>
+            </div>
+            <div class="quadrant-content">
+              <div class="chart-container" id="timeline-main"></div>
+            </div>
+          </div>
+
+          <!-- Top Right: Decade Comparison -->
+          <div class="quadrant">
+            <div class="quadrant-header">
+              <div class="quadrant-title">By Decade</div>
+              <div class="quadrant-subtitle">failure reason evolution</div>
+            </div>
+            <div class="quadrant-content">
+              <div class="chart-container" id="timeline-decades"></div>
+            </div>
+          </div>
+
+          <!-- Bottom Left: Era Cards -->
+          <div class="quadrant">
+            <div class="quadrant-header">
+              <div class="quadrant-title">Key Eras</div>
+            </div>
+            <div class="quadrant-content" id="timeline-eras"></div>
+          </div>
+
+          <!-- Bottom Right: Notable Failures -->
+          <div class="quadrant">
+            <div class="quadrant-header">
+              <div class="quadrant-title">Notable Failures</div>
+              <div class="quadrant-subtitle">case studies</div>
+            </div>
+            <div class="quadrant-content" id="timeline-notable"></div>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <!-- Scripts -->
+  <script src="https://d3js.org/d3.v7.min.js"></script>
+  <script src="js/data.js"></script>
+  <script src="js/utils.js"></script>
+  <script src="js/tabs/overview.js"></script>
+  <script src="js/tabs/sectors.js"></script>
+  <script src="js/tabs/funding.js"></script>
+  <script src="js/tabs/timeline.js"></script>
+
+  <script>
+    // Initialize on load
+    document.addEventListener('DOMContentLoaded', () => {
+      // Update header stats
+      document.getElementById('header-total').textContent = DATA.summary.totalStartups;
+      document.getElementById('header-funding').textContent = Utils.formatMoney(DATA.summary.totalFundingLost);
+
+      // Initialize first tab
+      initOverview();
+    });
+  </script>
+</body>
+</html>
