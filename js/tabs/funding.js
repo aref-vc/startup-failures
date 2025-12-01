@@ -10,6 +10,10 @@ function initFunding() {
   renderFundingScatter();
   renderFundingByReason();
   renderFundingYearly();
+  renderRidgeline();
+  renderStripPlot();
+  renderLollipop();
+  renderWaterfall();
 }
 
 // ============================================
@@ -810,4 +814,400 @@ function renderFundingROI() {
     .attr('fill', Utils.colors.textSecondary)
     .attr('font-size', '10px')
     .text(`Median: $${median.toFixed(0)}M/yr`);
+}
+
+// ============================================
+// Ridgeline Plot (Funding Distributions by Sector)
+// ============================================
+function renderRidgeline() {
+  const container = document.getElementById('funding-ridgeline');
+  if (!container) return;
+
+  const { width, height } = Utils.getChartDimensions(container);
+  const margin = { top: 30, right: 20, bottom: 30, left: 100 };
+  const innerWidth = width - margin.left - margin.right;
+  const innerHeight = height - margin.top - margin.bottom;
+
+  const sectors = Object.keys(DATA.bySector).slice(0, 6);
+  const overlap = 0.8;
+
+  const svg = d3.select(container)
+    .append('svg')
+    .attr('width', width)
+    .attr('height', height)
+    .append('g')
+    .attr('transform', `translate(${margin.left},${margin.top})`);
+
+  const x = d3.scaleLinear()
+    .domain([0, 4]) // log10 scale
+    .range([0, innerWidth]);
+
+  const y = d3.scaleBand()
+    .domain(sectors)
+    .range([0, innerHeight])
+    .padding(0);
+
+  const rowHeight = y.bandwidth();
+
+  // Generate density for each sector
+  sectors.forEach(sector => {
+    const data = DATA.startups
+      .filter(s => s.sector === sector && s.fundingAmount > 0)
+      .map(s => Math.log10(s.fundingAmount));
+
+    if (data.length < 3) return;
+
+    // Kernel density estimation
+    const kde = kernelDensityEstimator(kernelEpanechnikov(0.3), x.ticks(40));
+    const density = kde(data);
+
+    const yDensity = d3.scaleLinear()
+      .domain([0, d3.max(density, d => d[1])])
+      .range([0, rowHeight * overlap]);
+
+    const area = d3.area()
+      .curve(d3.curveBasis)
+      .x(d => x(d[0]))
+      .y0(y(sector) + rowHeight)
+      .y1(d => y(sector) + rowHeight - yDensity(d[1]));
+
+    svg.append('path')
+      .datum(density)
+      .attr('d', area)
+      .attr('fill', Utils.getSectorColor(sector))
+      .attr('fill-opacity', 0.6)
+      .attr('stroke', Utils.getSectorColor(sector))
+      .attr('stroke-width', 1);
+  });
+
+  // Y axis labels
+  svg.selectAll('.sector-label')
+    .data(sectors)
+    .join('text')
+    .attr('x', -8)
+    .attr('y', d => y(d) + rowHeight / 2)
+    .attr('text-anchor', 'end')
+    .attr('dominant-baseline', 'middle')
+    .attr('fill', d => Utils.getSectorColor(d))
+    .attr('font-size', '9px')
+    .text(d => Utils.truncate(d, 12));
+
+  // X axis
+  const xAxis = svg.append('g')
+    .attr('transform', `translate(0,${innerHeight})`)
+    .call(d3.axisBottom(x).ticks(4).tickFormat(d => '$' + Math.pow(10, d).toFixed(0) + 'M'));
+  Utils.styleAxis(xAxis);
+
+  // Helper functions
+  function kernelDensityEstimator(kernel, X) {
+    return function(V) {
+      return X.map(x => [x, d3.mean(V, v => kernel(x - v))]);
+    };
+  }
+
+  function kernelEpanechnikov(k) {
+    return function(v) {
+      return Math.abs(v /= k) <= 1 ? 0.75 * (1 - v * v) / k : 0;
+    };
+  }
+}
+
+// ============================================
+// Strip Plot (Individual Funding by Tier)
+// ============================================
+function renderStripPlot() {
+  const container = document.getElementById('funding-strip');
+  if (!container) return;
+
+  const { width, height } = Utils.getChartDimensions(container);
+  const margin = { top: 20, right: 20, bottom: 40, left: 80 };
+  const innerWidth = width - margin.left - margin.right;
+  const innerHeight = height - margin.top - margin.bottom;
+
+  const tiers = ['Seed', 'Series A', 'Series B', 'Series C+', 'Mega'];
+
+  const data = DATA.startups
+    .filter(s => s.fundingAmount > 0 && tiers.includes(s.fundingTier))
+    .map(s => ({
+      tier: s.fundingTier,
+      funding: s.fundingAmount,
+      name: s.name
+    }));
+
+  const svg = d3.select(container)
+    .append('svg')
+    .attr('width', width)
+    .attr('height', height)
+    .append('g')
+    .attr('transform', `translate(${margin.left},${margin.top})`);
+
+  const x = d3.scaleLog()
+    .domain([1, d3.max(data, d => d.funding)])
+    .range([0, innerWidth]);
+
+  const y = d3.scaleBand()
+    .domain(tiers)
+    .range([0, innerHeight])
+    .padding(0.2);
+
+  // Jitter function
+  const jitter = () => (Math.random() - 0.5) * y.bandwidth() * 0.6;
+
+  // Draw points
+  svg.selectAll('circle')
+    .data(data)
+    .join('circle')
+    .attr('cx', d => x(d.funding))
+    .attr('cy', d => y(d.tier) + y.bandwidth() / 2 + jitter())
+    .attr('r', 3)
+    .attr('fill', Utils.colors.cyan)
+    .attr('fill-opacity', 0.5)
+    .style('cursor', 'pointer')
+    .on('mouseenter', function(event, d) {
+      d3.select(this).attr('r', 5).attr('fill-opacity', 1);
+      const html = `
+        <div class="tooltip-title">${d.name}</div>
+        <div class="tooltip-row"><span class="tooltip-label">Funding</span><span class="tooltip-value">$${d.funding.toFixed(0)}M</span></div>
+        <div class="tooltip-row"><span class="tooltip-label">Tier</span><span>${d.tier}</span></div>
+      `;
+      Utils.showTooltip(html, event.pageX, event.pageY);
+    })
+    .on('mouseleave', function() {
+      d3.select(this).attr('r', 3).attr('fill-opacity', 0.5);
+      Utils.hideTooltip();
+    });
+
+  // Y axis
+  svg.append('g')
+    .selectAll('text')
+    .data(tiers)
+    .join('text')
+    .attr('x', -8)
+    .attr('y', d => y(d) + y.bandwidth() / 2)
+    .attr('text-anchor', 'end')
+    .attr('dominant-baseline', 'middle')
+    .attr('fill', Utils.colors.textSecondary)
+    .attr('font-size', '10px')
+    .text(d => d);
+
+  // X axis
+  const xAxis = svg.append('g')
+    .attr('transform', `translate(0,${innerHeight})`)
+    .call(d3.axisBottom(x).ticks(5).tickFormat(d => '$' + d + 'M'));
+  Utils.styleAxis(xAxis);
+}
+
+// ============================================
+// Lollipop Chart (Top Funded Startups)
+// ============================================
+function renderLollipop() {
+  const container = document.getElementById('funding-lollipop');
+  if (!container) return;
+
+  const { width, height } = Utils.getChartDimensions(container);
+  const margin = { top: 20, right: 40, bottom: 20, left: 120 };
+  const innerWidth = width - margin.left - margin.right;
+  const innerHeight = height - margin.top - margin.bottom;
+
+  // Top 15 funded startups with efficiency
+  const data = DATA.startups
+    .filter(s => s.fundingAmount > 0 && s.survivalYears > 0)
+    .map(s => ({
+      name: s.name,
+      funding: s.fundingAmount,
+      survival: s.survivalYears,
+      efficiency: s.fundingAmount / s.survivalYears
+    }))
+    .sort((a, b) => b.funding - a.funding)
+    .slice(0, 12);
+
+  const svg = d3.select(container)
+    .append('svg')
+    .attr('width', width)
+    .attr('height', height)
+    .append('g')
+    .attr('transform', `translate(${margin.left},${margin.top})`);
+
+  const x = d3.scaleLinear()
+    .domain([0, d3.max(data, d => d.funding)])
+    .range([0, innerWidth]);
+
+  const y = d3.scaleBand()
+    .domain(data.map(d => d.name))
+    .range([0, innerHeight])
+    .padding(0.3);
+
+  // Draw lines
+  svg.selectAll('.lollipop-line')
+    .data(data)
+    .join('line')
+    .attr('class', 'lollipop-line')
+    .attr('x1', 0)
+    .attr('x2', d => x(d.funding))
+    .attr('y1', d => y(d.name) + y.bandwidth() / 2)
+    .attr('y2', d => y(d.name) + y.bandwidth() / 2)
+    .attr('stroke', Utils.colors.border)
+    .attr('stroke-width', 2);
+
+  // Draw circles
+  svg.selectAll('.lollipop-circle')
+    .data(data)
+    .join('circle')
+    .attr('class', 'lollipop-circle')
+    .attr('cx', d => x(d.funding))
+    .attr('cy', d => y(d.name) + y.bandwidth() / 2)
+    .attr('r', 6)
+    .attr('fill', d => {
+      // Color by efficiency (red = worst, green = best)
+      const effMax = d3.max(data, d => d.efficiency);
+      const effMin = d3.min(data, d => d.efficiency);
+      const norm = (d.efficiency - effMin) / (effMax - effMin);
+      return d3.interpolate(Utils.colors.emerald, Utils.colors.coral)(norm);
+    })
+    .style('cursor', 'pointer')
+    .on('mouseenter', function(event, d) {
+      d3.select(this).attr('r', 8);
+      const html = `
+        <div class="tooltip-title">${d.name}</div>
+        <div class="tooltip-row"><span class="tooltip-label">Funding</span><span class="tooltip-value">$${d.funding.toFixed(0)}M</span></div>
+        <div class="tooltip-row"><span class="tooltip-label">Survival</span><span>${d.survival} yrs</span></div>
+        <div class="tooltip-row"><span class="tooltip-label">Burn Rate</span><span>$${d.efficiency.toFixed(0)}M/yr</span></div>
+      `;
+      Utils.showTooltip(html, event.pageX, event.pageY);
+    })
+    .on('mouseleave', function() {
+      d3.select(this).attr('r', 6);
+      Utils.hideTooltip();
+    });
+
+  // Y axis labels
+  svg.selectAll('.name-label')
+    .data(data)
+    .join('text')
+    .attr('x', -8)
+    .attr('y', d => y(d.name) + y.bandwidth() / 2)
+    .attr('text-anchor', 'end')
+    .attr('dominant-baseline', 'middle')
+    .attr('fill', Utils.colors.textSecondary)
+    .attr('font-size', '9px')
+    .text(d => Utils.truncate(d.name, 15));
+
+  // Funding labels
+  svg.selectAll('.funding-label')
+    .data(data)
+    .join('text')
+    .attr('x', d => x(d.funding) + 10)
+    .attr('y', d => y(d.name) + y.bandwidth() / 2)
+    .attr('dominant-baseline', 'middle')
+    .attr('fill', Utils.colors.textTertiary)
+    .attr('font-size', '9px')
+    .text(d => '$' + d.funding.toFixed(0) + 'M');
+}
+
+// ============================================
+// Waterfall Chart (Capital Lost Breakdown)
+// ============================================
+function renderWaterfall() {
+  const container = document.getElementById('funding-waterfall');
+  if (!container) return;
+
+  const { width, height } = Utils.getChartDimensions(container);
+  const margin = { top: 20, right: 20, bottom: 60, left: 60 };
+  const innerWidth = width - margin.left - margin.right;
+  const innerHeight = height - margin.top - margin.bottom;
+
+  // Build waterfall data by sector
+  const sectors = Object.entries(DATA.bySector)
+    .sort((a, b) => b[1].totalFunding - a[1].totalFunding)
+    .slice(0, 6);
+
+  let cumulative = 0;
+  const data = sectors.map(([sector, info]) => {
+    const start = cumulative;
+    cumulative += info.totalFunding;
+    return {
+      sector,
+      value: info.totalFunding,
+      start,
+      end: cumulative
+    };
+  });
+
+  // Add total
+  data.push({
+    sector: 'Total',
+    value: cumulative,
+    start: 0,
+    end: cumulative,
+    isTotal: true
+  });
+
+  const svg = d3.select(container)
+    .append('svg')
+    .attr('width', width)
+    .attr('height', height)
+    .append('g')
+    .attr('transform', `translate(${margin.left},${margin.top})`);
+
+  const x = d3.scaleBand()
+    .domain(data.map(d => d.sector))
+    .range([0, innerWidth])
+    .padding(0.2);
+
+  const y = d3.scaleLinear()
+    .domain([0, cumulative * 1.1])
+    .range([innerHeight, 0]);
+
+  // Draw connector lines
+  data.slice(0, -1).forEach((d, i) => {
+    svg.append('line')
+      .attr('x1', x(d.sector) + x.bandwidth())
+      .attr('x2', x(data[i + 1].sector))
+      .attr('y1', y(d.end))
+      .attr('y2', y(d.end))
+      .attr('stroke', Utils.colors.border)
+      .attr('stroke-dasharray', '2,2');
+  });
+
+  // Draw bars
+  svg.selectAll('rect')
+    .data(data)
+    .join('rect')
+    .attr('x', d => x(d.sector))
+    .attr('y', d => d.isTotal ? y(d.end) : y(d.end))
+    .attr('width', x.bandwidth())
+    .attr('height', d => d.isTotal ? innerHeight - y(d.value) : y(d.start) - y(d.end))
+    .attr('fill', d => d.isTotal ? Utils.colors.coral : Utils.getSectorColor(d.sector))
+    .attr('fill-opacity', 0.8)
+    .style('cursor', 'pointer')
+    .on('mouseenter', function(event, d) {
+      d3.select(this).attr('fill-opacity', 1);
+      const html = `
+        <div class="tooltip-title">${d.sector}</div>
+        <div class="tooltip-row"><span class="tooltip-label">Capital Lost</span><span class="tooltip-value">$${(d.value / 1000).toFixed(1)}B</span></div>
+        ${d.isTotal ? '' : `<div class="tooltip-row"><span class="tooltip-label">Cumulative</span><span>$${(d.end / 1000).toFixed(1)}B</span></div>`}
+      `;
+      Utils.showTooltip(html, event.pageX, event.pageY);
+    })
+    .on('mouseleave', function() {
+      d3.select(this).attr('fill-opacity', 0.8);
+      Utils.hideTooltip();
+    });
+
+  // X axis
+  const xAxis = svg.append('g')
+    .attr('transform', `translate(0,${innerHeight})`)
+    .call(d3.axisBottom(x));
+  xAxis.selectAll('text')
+    .attr('transform', 'rotate(-35)')
+    .attr('text-anchor', 'end')
+    .attr('fill', Utils.colors.textTertiary)
+    .attr('font-size', '9px')
+    .text(d => Utils.truncate(d, 10));
+  xAxis.selectAll('line, path').attr('stroke', Utils.colors.border);
+
+  // Y axis
+  const yAxis = svg.append('g')
+    .call(d3.axisLeft(y).ticks(5).tickFormat(d => '$' + (d / 1000).toFixed(0) + 'B'));
+  Utils.styleAxis(yAxis);
 }

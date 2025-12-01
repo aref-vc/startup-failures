@@ -10,6 +10,10 @@ function initTimeline() {
   renderDecadeComparison();
   renderSurvivalTrend();
   renderFailureAcceleration();
+  renderStreamGraph();
+  renderCalendarHeatmap();
+  renderDecadeTrajectory();
+  renderHorizonChart();
 }
 
 // ============================================
@@ -811,4 +815,481 @@ function renderDecadeStats() {
       </div>
     </div>
   `;
+}
+
+// ============================================
+// Stream Graph (Reason Evolution Over Time)
+// ============================================
+function renderStreamGraph() {
+  const container = document.getElementById('timeline-stream');
+  if (!container) return;
+
+  const { width, height } = Utils.getChartDimensions(container);
+  const margin = { top: 20, right: 100, bottom: 30, left: 40 };
+  const innerWidth = width - margin.left - margin.right;
+  const innerHeight = height - margin.top - margin.bottom;
+
+  // Build data by year and reason
+  const years = Object.keys(DATA.byFailureYear).map(Number).sort((a, b) => a - b);
+  const topReasons = Object.entries(DATA.byReason)
+    .sort((a, b) => b[1].count - a[1].count)
+    .slice(0, 6)
+    .map(d => d[0]);
+
+  const data = years.map(year => {
+    const row = { year };
+    topReasons.forEach(reason => {
+      row[reason] = DATA.startups.filter(s =>
+        s.failureYear === year && s.failureReasons[reason]
+      ).length;
+    });
+    return row;
+  });
+
+  const svg = d3.select(container)
+    .append('svg')
+    .attr('width', width)
+    .attr('height', height)
+    .append('g')
+    .attr('transform', `translate(${margin.left},${margin.top})`);
+
+  const stack = d3.stack()
+    .keys(topReasons)
+    .offset(d3.stackOffsetWiggle);
+
+  const series = stack(data);
+
+  const x = d3.scaleLinear()
+    .domain(d3.extent(years))
+    .range([0, innerWidth]);
+
+  const y = d3.scaleLinear()
+    .domain([
+      d3.min(series, s => d3.min(s, d => d[0])),
+      d3.max(series, s => d3.max(s, d => d[1]))
+    ])
+    .range([innerHeight, 0]);
+
+  const area = d3.area()
+    .x(d => x(d.data.year))
+    .y0(d => y(d[0]))
+    .y1(d => y(d[1]))
+    .curve(d3.curveCardinal);
+
+  svg.selectAll('path')
+    .data(series)
+    .join('path')
+    .attr('d', area)
+    .attr('fill', d => Utils.getReasonColor(d.key))
+    .attr('fill-opacity', 0.8)
+    .style('cursor', 'pointer')
+    .on('mouseenter', function(event, d) {
+      d3.select(this).attr('fill-opacity', 1);
+      const total = d3.sum(d, v => v[1] - v[0]);
+      const html = `
+        <div class="tooltip-title">${d.key}</div>
+        <div class="tooltip-row"><span class="tooltip-label">Total</span><span class="tooltip-value">${total}</span></div>
+      `;
+      Utils.showTooltip(html, event.pageX, event.pageY);
+    })
+    .on('mouseleave', function() {
+      d3.select(this).attr('fill-opacity', 0.8);
+      Utils.hideTooltip();
+    });
+
+  // X axis
+  const xAxis = svg.append('g')
+    .attr('transform', `translate(0,${innerHeight})`)
+    .call(d3.axisBottom(x).ticks(10).tickFormat(d3.format('d')));
+  Utils.styleAxis(xAxis);
+
+  // Legend
+  const legend = svg.append('g')
+    .attr('transform', `translate(${innerWidth + 10}, 0)`);
+
+  topReasons.forEach((reason, i) => {
+    const g = legend.append('g')
+      .attr('transform', `translate(0, ${i * 16})`);
+    g.append('rect')
+      .attr('width', 10)
+      .attr('height', 10)
+      .attr('fill', Utils.getReasonColor(reason));
+    g.append('text')
+      .attr('x', 14)
+      .attr('y', 9)
+      .attr('fill', Utils.colors.textTertiary)
+      .attr('font-size', '8px')
+      .text(Utils.truncate(reason, 10));
+  });
+}
+
+// ============================================
+// Calendar Heatmap
+// ============================================
+function renderCalendarHeatmap() {
+  const container = document.getElementById('timeline-calendar');
+  if (!container) return;
+
+  const { width, height } = Utils.getChartDimensions(container);
+  const margin = { top: 30, right: 20, bottom: 20, left: 40 };
+  const innerWidth = width - margin.left - margin.right;
+  const innerHeight = height - margin.top - margin.bottom;
+
+  // Get year range
+  const years = Object.keys(DATA.byFailureYear).map(Number).sort((a, b) => a - b);
+  const minYear = Math.max(years[0], 1995);
+  const maxYear = years[years.length - 1];
+
+  // Filter to recent years that fit
+  const yearRange = maxYear - minYear + 1;
+  const cellSize = Math.min(innerWidth / yearRange - 1, innerHeight / 6);
+
+  // Create year buckets with counts
+  const yearCounts = {};
+  years.forEach(y => {
+    if (y >= minYear) {
+      yearCounts[y] = DATA.byFailureYear[y].count;
+    }
+  });
+
+  const maxCount = d3.max(Object.values(yearCounts));
+
+  const svg = d3.select(container)
+    .append('svg')
+    .attr('width', width)
+    .attr('height', height)
+    .append('g')
+    .attr('transform', `translate(${margin.left},${margin.top})`);
+
+  const colorScale = d3.scaleSequential()
+    .domain([0, maxCount])
+    .interpolator(d3.interpolate('#1A1A18', Utils.colors.coral));
+
+  // Draw cells
+  const cols = Math.floor(innerWidth / (cellSize + 2));
+  const displayYears = Object.keys(yearCounts).map(Number).sort((a, b) => a - b);
+
+  displayYears.forEach((year, i) => {
+    const col = i % cols;
+    const row = Math.floor(i / cols);
+
+    svg.append('rect')
+      .attr('x', col * (cellSize + 2))
+      .attr('y', row * (cellSize + 2))
+      .attr('width', cellSize)
+      .attr('height', cellSize)
+      .attr('fill', colorScale(yearCounts[year]))
+      .attr('rx', 2)
+      .style('cursor', 'pointer')
+      .on('mouseenter', function(event) {
+        d3.select(this).attr('stroke', Utils.colors.lime).attr('stroke-width', 2);
+        const html = `
+          <div class="tooltip-title">${year}</div>
+          <div class="tooltip-row"><span class="tooltip-label">Failures</span><span class="tooltip-value">${yearCounts[year]}</span></div>
+        `;
+        Utils.showTooltip(html, event.pageX, event.pageY);
+      })
+      .on('mouseleave', function() {
+        d3.select(this).attr('stroke', 'none');
+        Utils.hideTooltip();
+      });
+
+    // Add year label for start of each row
+    if (col === 0) {
+      svg.append('text')
+        .attr('x', -8)
+        .attr('y', row * (cellSize + 2) + cellSize / 2)
+        .attr('text-anchor', 'end')
+        .attr('dominant-baseline', 'middle')
+        .attr('fill', Utils.colors.textTertiary)
+        .attr('font-size', '9px')
+        .text(year);
+    }
+  });
+
+  // Legend
+  const legendWidth = 100;
+  const legendHeight = 10;
+  const legend = svg.append('g')
+    .attr('transform', `translate(${innerWidth - legendWidth}, -20)`);
+
+  const legendScale = d3.scaleLinear()
+    .domain([0, maxCount])
+    .range([0, legendWidth]);
+
+  const defs = svg.append('defs');
+  const gradient = defs.append('linearGradient')
+    .attr('id', 'calendar-gradient');
+
+  gradient.selectAll('stop')
+    .data([0, 0.5, 1])
+    .join('stop')
+    .attr('offset', d => d * 100 + '%')
+    .attr('stop-color', d => colorScale(d * maxCount));
+
+  legend.append('rect')
+    .attr('width', legendWidth)
+    .attr('height', legendHeight)
+    .attr('fill', 'url(#calendar-gradient)')
+    .attr('rx', 2);
+
+  legend.append('text')
+    .attr('x', 0)
+    .attr('y', -3)
+    .attr('fill', Utils.colors.textTertiary)
+    .attr('font-size', '8px')
+    .text('0');
+
+  legend.append('text')
+    .attr('x', legendWidth)
+    .attr('y', -3)
+    .attr('text-anchor', 'end')
+    .attr('fill', Utils.colors.textTertiary)
+    .attr('font-size', '8px')
+    .text(maxCount);
+}
+
+// ============================================
+// Decade Trajectory (Connected Scatter)
+// ============================================
+function renderDecadeTrajectory() {
+  const container = document.getElementById('timeline-trajectory');
+  if (!container) return;
+
+  const { width, height } = Utils.getChartDimensions(container);
+  const margin = { top: 30, right: 30, bottom: 50, left: 50 };
+  const innerWidth = width - margin.left - margin.right;
+  const innerHeight = height - margin.top - margin.bottom;
+
+  // Calculate decade averages
+  const decades = ['1990s', '2000s', '2010s', '2020s'];
+  const decadeStarts = [1990, 2000, 2010, 2020];
+
+  const data = decadeStarts.map((start, i) => {
+    const startups = DATA.startups.filter(s => s.failureDecade === start);
+    return {
+      decade: decades[i],
+      avgFunding: d3.mean(startups, s => s.fundingAmount) || 0,
+      avgSurvival: d3.mean(startups, s => s.survivalYears) || 0,
+      count: startups.length
+    };
+  }).filter(d => d.count > 0);
+
+  const svg = d3.select(container)
+    .append('svg')
+    .attr('width', width)
+    .attr('height', height)
+    .append('g')
+    .attr('transform', `translate(${margin.left},${margin.top})`);
+
+  const x = d3.scaleLinear()
+    .domain([0, d3.max(data, d => d.avgFunding) * 1.2])
+    .range([0, innerWidth]);
+
+  const y = d3.scaleLinear()
+    .domain([0, d3.max(data, d => d.avgSurvival) * 1.2])
+    .range([innerHeight, 0]);
+
+  // Draw connecting line
+  const line = d3.line()
+    .x(d => x(d.avgFunding))
+    .y(d => y(d.avgSurvival))
+    .curve(d3.curveMonotoneX);
+
+  svg.append('path')
+    .datum(data)
+    .attr('d', line)
+    .attr('fill', 'none')
+    .attr('stroke', Utils.colors.lime)
+    .attr('stroke-width', 2)
+    .attr('stroke-opacity', 0.6);
+
+  // Draw arrow head on last segment
+  if (data.length > 1) {
+    const last = data[data.length - 1];
+    const prev = data[data.length - 2];
+    const angle = Math.atan2(
+      y(last.avgSurvival) - y(prev.avgSurvival),
+      x(last.avgFunding) - x(prev.avgFunding)
+    );
+
+    svg.append('polygon')
+      .attr('points', '-6,-4 0,0 -6,4')
+      .attr('fill', Utils.colors.lime)
+      .attr('transform', `translate(${x(last.avgFunding)},${y(last.avgSurvival)}) rotate(${angle * 180 / Math.PI})`);
+  }
+
+  // Draw points
+  svg.selectAll('circle')
+    .data(data)
+    .join('circle')
+    .attr('cx', d => x(d.avgFunding))
+    .attr('cy', d => y(d.avgSurvival))
+    .attr('r', d => Math.sqrt(d.count) + 5)
+    .attr('fill', Utils.colors.lime)
+    .attr('fill-opacity', 0.7)
+    .attr('stroke', Utils.colors.bgMain)
+    .attr('stroke-width', 2)
+    .style('cursor', 'pointer')
+    .on('mouseenter', function(event, d) {
+      d3.select(this).attr('fill-opacity', 1);
+      const html = `
+        <div class="tooltip-title">${d.decade}</div>
+        <div class="tooltip-row"><span class="tooltip-label">Avg Funding</span><span class="tooltip-value">$${d.avgFunding.toFixed(0)}M</span></div>
+        <div class="tooltip-row"><span class="tooltip-label">Avg Survival</span><span>${d.avgSurvival.toFixed(1)} yrs</span></div>
+        <div class="tooltip-row"><span class="tooltip-label">Count</span><span>${d.count}</span></div>
+      `;
+      Utils.showTooltip(html, event.pageX, event.pageY);
+    })
+    .on('mouseleave', function() {
+      d3.select(this).attr('fill-opacity', 0.7);
+      Utils.hideTooltip();
+    });
+
+  // Labels
+  svg.selectAll('.decade-label')
+    .data(data)
+    .join('text')
+    .attr('x', d => x(d.avgFunding))
+    .attr('y', d => y(d.avgSurvival) - Math.sqrt(d.count) - 10)
+    .attr('text-anchor', 'middle')
+    .attr('fill', Utils.colors.textSecondary)
+    .attr('font-size', '10px')
+    .attr('font-weight', '500')
+    .text(d => d.decade);
+
+  // Axes
+  const xAxis = svg.append('g')
+    .attr('transform', `translate(0,${innerHeight})`)
+    .call(d3.axisBottom(x).ticks(5).tickFormat(d => '$' + d + 'M'));
+  Utils.styleAxis(xAxis);
+
+  svg.append('text')
+    .attr('x', innerWidth / 2)
+    .attr('y', innerHeight + 35)
+    .attr('text-anchor', 'middle')
+    .attr('fill', Utils.colors.textTertiary)
+    .attr('font-size', '10px')
+    .text('Avg Funding');
+
+  const yAxis = svg.append('g')
+    .call(d3.axisLeft(y).ticks(5));
+  Utils.styleAxis(yAxis);
+
+  svg.append('text')
+    .attr('transform', 'rotate(-90)')
+    .attr('x', -innerHeight / 2)
+    .attr('y', -35)
+    .attr('text-anchor', 'middle')
+    .attr('fill', Utils.colors.textTertiary)
+    .attr('font-size', '10px')
+    .text('Avg Survival (years)');
+}
+
+// ============================================
+// Horizon Chart (Multi-Metric Time Series)
+// ============================================
+function renderHorizonChart() {
+  const container = document.getElementById('timeline-horizon');
+  if (!container) return;
+
+  const { width, height } = Utils.getChartDimensions(container);
+  const margin = { top: 20, right: 20, bottom: 30, left: 80 };
+  const innerWidth = width - margin.left - margin.right;
+  const innerHeight = height - margin.top - margin.bottom;
+
+  // Metrics to display
+  const metrics = [
+    { key: 'count', label: 'Failures', color: Utils.colors.coral },
+    { key: 'funding', label: 'Capital Lost', color: Utils.colors.amber },
+    { key: 'avgSurvival', label: 'Avg Survival', color: Utils.colors.emerald }
+  ];
+
+  const bandHeight = innerHeight / metrics.length;
+
+  // Prepare data
+  const years = Object.keys(DATA.byFailureYear).map(Number).sort((a, b) => a - b);
+  const data = years.map(year => ({
+    year,
+    count: DATA.byFailureYear[year].count,
+    funding: DATA.byFailureYear[year].totalFunding,
+    avgSurvival: DATA.byFailureYear[year].avgSurvival || 0
+  }));
+
+  const svg = d3.select(container)
+    .append('svg')
+    .attr('width', width)
+    .attr('height', height)
+    .append('g')
+    .attr('transform', `translate(${margin.left},${margin.top})`);
+
+  const x = d3.scaleLinear()
+    .domain(d3.extent(years))
+    .range([0, innerWidth]);
+
+  metrics.forEach((metric, i) => {
+    const g = svg.append('g')
+      .attr('transform', `translate(0, ${i * bandHeight})`);
+
+    const y = d3.scaleLinear()
+      .domain([0, d3.max(data, d => d[metric.key])])
+      .range([bandHeight - 5, 0]);
+
+    const area = d3.area()
+      .x(d => x(d.year))
+      .y0(bandHeight - 5)
+      .y1(d => y(d[metric.key]))
+      .curve(d3.curveMonotoneX);
+
+    // Draw area with layered bands for horizon effect
+    [0.3, 0.5, 0.7, 1].forEach((opacity, j) => {
+      const threshold = (j + 1) / 4;
+      g.append('path')
+        .datum(data)
+        .attr('d', area)
+        .attr('fill', metric.color)
+        .attr('fill-opacity', opacity * 0.3)
+        .attr('clip-path', `inset(${(1 - threshold) * 100}% 0 0 0)`);
+    });
+
+    // Line on top
+    const line = d3.line()
+      .x(d => x(d.year))
+      .y(d => y(d[metric.key]))
+      .curve(d3.curveMonotoneX);
+
+    g.append('path')
+      .datum(data)
+      .attr('d', line)
+      .attr('fill', 'none')
+      .attr('stroke', metric.color)
+      .attr('stroke-width', 1.5);
+
+    // Label
+    g.append('text')
+      .attr('x', -8)
+      .attr('y', bandHeight / 2)
+      .attr('text-anchor', 'end')
+      .attr('dominant-baseline', 'middle')
+      .attr('fill', metric.color)
+      .attr('font-size', '10px')
+      .text(metric.label);
+
+    // Separator line
+    if (i < metrics.length - 1) {
+      g.append('line')
+        .attr('x1', 0)
+        .attr('x2', innerWidth)
+        .attr('y1', bandHeight)
+        .attr('y2', bandHeight)
+        .attr('stroke', Utils.colors.border)
+        .attr('stroke-opacity', 0.5);
+    }
+  });
+
+  // X axis
+  const xAxis = svg.append('g')
+    .attr('transform', `translate(0,${innerHeight})`)
+    .call(d3.axisBottom(x).ticks(10).tickFormat(d3.format('d')));
+  Utils.styleAxis(xAxis);
 }

@@ -10,6 +10,10 @@ function initSectors() {
   renderSectorRadar();
   renderSectorSurvival();
   renderSectorBars();
+  renderRadialStacked();
+  renderBumpChart();
+  renderMarimekko();
+  renderDotMatrix();
 }
 
 // ============================================
@@ -820,4 +824,398 @@ function renderSectorComparison() {
       </div>
     </div>
   `;
+}
+
+// ============================================
+// Radial Stacked Bar Chart
+// ============================================
+function renderRadialStacked() {
+  const container = document.getElementById('sectors-radial');
+  if (!container) return;
+
+  const { width, height } = Utils.getChartDimensions(container);
+  const radius = Math.min(width, height) / 2 - 40;
+  const innerRadius = 40;
+
+  const sectors = Object.keys(DATA.bySector);
+  const reasons = DATA.failureReasons.slice(0, 6);
+
+  // Build data
+  const data = sectors.map(sector => {
+    const sectorData = { sector };
+    reasons.forEach(reason => {
+      sectorData[reason] = DATA.startups.filter(s =>
+        s.sector === sector && s.failureReasons[reason]
+      ).length;
+    });
+    sectorData.total = d3.sum(reasons.map(r => sectorData[r]));
+    return sectorData;
+  }).sort((a, b) => b.total - a.total);
+
+  const svg = d3.select(container)
+    .append('svg')
+    .attr('width', width)
+    .attr('height', height)
+    .append('g')
+    .attr('transform', `translate(${width/2},${height/2})`);
+
+  const x = d3.scaleBand()
+    .domain(data.map(d => d.sector))
+    .range([0, 2 * Math.PI])
+    .padding(0.1);
+
+  const y = d3.scaleRadial()
+    .domain([0, d3.max(data, d => d.total)])
+    .range([innerRadius, radius]);
+
+  const stack = d3.stack().keys(reasons);
+  const stackedData = stack(data);
+
+  const color = d3.scaleOrdinal()
+    .domain(reasons)
+    .range([Utils.colors.coral, Utils.colors.amber, Utils.colors.cyan, Utils.colors.emerald, Utils.colors.purple, Utils.colors.lime]);
+
+  // Draw arcs
+  svg.selectAll('g')
+    .data(stackedData)
+    .join('g')
+    .attr('fill', d => color(d.key))
+    .selectAll('path')
+    .data(d => d)
+    .join('path')
+    .attr('d', d3.arc()
+      .innerRadius(d => y(d[0]))
+      .outerRadius(d => y(d[1]))
+      .startAngle(d => x(d.data.sector))
+      .endAngle(d => x(d.data.sector) + x.bandwidth())
+      .padAngle(0.01)
+      .padRadius(innerRadius)
+    )
+    .attr('fill-opacity', 0.8);
+
+  // Center label
+  svg.append('text')
+    .attr('text-anchor', 'middle')
+    .attr('fill', Utils.colors.textSecondary)
+    .attr('font-size', '10px')
+    .text('Failure Reasons');
+
+  // Sector labels
+  svg.selectAll('.sector-label')
+    .data(data)
+    .join('text')
+    .attr('class', 'sector-label')
+    .attr('transform', d => {
+      const angle = x(d.sector) + x.bandwidth() / 2;
+      const r = radius + 15;
+      return `rotate(${angle * 180 / Math.PI - 90}) translate(${r},0) ${angle > Math.PI ? 'rotate(180)' : ''}`;
+    })
+    .attr('text-anchor', d => {
+      const angle = x(d.sector) + x.bandwidth() / 2;
+      return angle > Math.PI ? 'end' : 'start';
+    })
+    .attr('fill', Utils.colors.textTertiary)
+    .attr('font-size', '8px')
+    .text(d => Utils.truncate(d.sector, 12));
+}
+
+// ============================================
+// Bump Chart (Sector Rankings Over Time)
+// ============================================
+function renderBumpChart() {
+  const container = document.getElementById('sectors-bump');
+  if (!container) return;
+
+  const { width, height } = Utils.getChartDimensions(container);
+  const margin = { top: 30, right: 100, bottom: 30, left: 100 };
+  const innerWidth = width - margin.left - margin.right;
+  const innerHeight = height - margin.top - margin.bottom;
+
+  const decades = ['1990s', '2000s', '2010s', '2020s'];
+  const decadeStarts = [1990, 2000, 2010, 2020];
+
+  // Get rankings per decade
+  const getRankings = (start) => {
+    const counts = {};
+    DATA.startups.forEach(s => {
+      if (s.failureDecade === start) {
+        counts[s.sector] = (counts[s.sector] || 0) + 1;
+      }
+    });
+    return Object.entries(counts)
+      .sort((a, b) => b[1] - a[1])
+      .map((d, i) => ({ sector: d[0], rank: i + 1, count: d[1] }));
+  };
+
+  const allRankings = decadeStarts.map(d => getRankings(d));
+  const sectors = Object.keys(DATA.bySector);
+
+  const svg = d3.select(container)
+    .append('svg')
+    .attr('width', width)
+    .attr('height', height)
+    .append('g')
+    .attr('transform', `translate(${margin.left},${margin.top})`);
+
+  const x = d3.scalePoint().domain(decades).range([0, innerWidth]);
+  const y = d3.scaleLinear().domain([1, sectors.length]).range([0, innerHeight]);
+
+  // Draw lines for each sector
+  sectors.forEach(sector => {
+    const points = [];
+    decades.forEach((dec, i) => {
+      const ranking = allRankings[i].find(r => r.sector === sector);
+      if (ranking) {
+        points.push({ decade: dec, rank: ranking.rank });
+      }
+    });
+
+    if (points.length > 1) {
+      svg.append('path')
+        .datum(points)
+        .attr('d', d3.line()
+          .x(d => x(d.decade))
+          .y(d => y(d.rank))
+          .curve(d3.curveMonotoneX)
+        )
+        .attr('fill', 'none')
+        .attr('stroke', Utils.getSectorColor(sector))
+        .attr('stroke-width', 3)
+        .attr('stroke-opacity', 0.7);
+
+      points.forEach(p => {
+        svg.append('circle')
+          .attr('cx', x(p.decade))
+          .attr('cy', y(p.rank))
+          .attr('r', 6)
+          .attr('fill', Utils.getSectorColor(sector))
+          .attr('stroke', Utils.colors.bgMain)
+          .attr('stroke-width', 2);
+      });
+    }
+  });
+
+  // Left labels
+  allRankings[0].forEach(r => {
+    svg.append('text')
+      .attr('x', -8)
+      .attr('y', y(r.rank))
+      .attr('text-anchor', 'end')
+      .attr('dominant-baseline', 'middle')
+      .attr('fill', Utils.getSectorColor(r.sector))
+      .attr('font-size', '9px')
+      .text(Utils.truncate(r.sector, 12));
+  });
+
+  // Right labels
+  allRankings[3].forEach(r => {
+    svg.append('text')
+      .attr('x', innerWidth + 8)
+      .attr('y', y(r.rank))
+      .attr('text-anchor', 'start')
+      .attr('dominant-baseline', 'middle')
+      .attr('fill', Utils.getSectorColor(r.sector))
+      .attr('font-size', '9px')
+      .text(Utils.truncate(r.sector, 12));
+  });
+
+  // Decade labels
+  decades.forEach(d => {
+    svg.append('text')
+      .attr('x', x(d))
+      .attr('y', -10)
+      .attr('text-anchor', 'middle')
+      .attr('fill', Utils.colors.textSecondary)
+      .attr('font-size', '10px')
+      .text(d);
+  });
+}
+
+// ============================================
+// Marimekko Chart (Sector × Funding Tier)
+// ============================================
+function renderMarimekko() {
+  const container = document.getElementById('sectors-marimekko');
+  if (!container) return;
+
+  const { width, height } = Utils.getChartDimensions(container);
+  const margin = { top: 30, right: 20, bottom: 40, left: 20 };
+  const innerWidth = width - margin.left - margin.right;
+  const innerHeight = height - margin.top - margin.bottom;
+
+  const sectors = Object.keys(DATA.bySector);
+  const tiers = ['Unfunded', 'Seed', 'Series A', 'Series B+'];
+
+  // Build data
+  const data = sectors.map(sector => {
+    const sectorData = { sector, total: DATA.bySector[sector].count };
+    tiers.forEach(tier => {
+      let count = 0;
+      DATA.startups.forEach(s => {
+        if (s.sector !== sector) return;
+        const t = s.fundingTier;
+        if (tier === 'Unfunded' && t === 'Unfunded') count++;
+        else if (tier === 'Seed' && (t === 'Seed' || t === 'Pre-Seed')) count++;
+        else if (tier === 'Series A' && t === 'Series A') count++;
+        else if (tier === 'Series B+' && (t === 'Series B' || t === 'Series C+' || t === 'Mega')) count++;
+      });
+      sectorData[tier] = count;
+    });
+    return sectorData;
+  });
+
+  const totalCount = d3.sum(data, d => d.total);
+
+  const svg = d3.select(container)
+    .append('svg')
+    .attr('width', width)
+    .attr('height', height)
+    .append('g')
+    .attr('transform', `translate(${margin.left},${margin.top})`);
+
+  const tierColors = {
+    'Unfunded': Utils.colors.textTertiary,
+    'Seed': Utils.colors.cyan,
+    'Series A': Utils.colors.emerald,
+    'Series B+': Utils.colors.amber
+  };
+
+  // Calculate x positions based on sector size
+  let xPos = 0;
+  data.forEach(d => {
+    d.x = xPos;
+    d.width = (d.total / totalCount) * innerWidth;
+    xPos += d.width;
+  });
+
+  // Draw rectangles
+  data.forEach(d => {
+    let yPos = 0;
+    tiers.forEach(tier => {
+      const h = (d[tier] / d.total) * innerHeight;
+      svg.append('rect')
+        .attr('x', d.x)
+        .attr('y', yPos)
+        .attr('width', d.width - 1)
+        .attr('height', h)
+        .attr('fill', tierColors[tier])
+        .attr('fill-opacity', 0.8)
+        .style('cursor', 'pointer')
+        .on('mouseenter', function(event) {
+          d3.select(this).attr('fill-opacity', 1);
+          const html = `
+            <div class="tooltip-title">${d.sector}</div>
+            <div class="tooltip-row"><span class="tooltip-label">${tier}</span><span class="tooltip-value">${d[tier]}</span></div>
+          `;
+          Utils.showTooltip(html, event.pageX, event.pageY);
+        })
+        .on('mouseleave', function() {
+          d3.select(this).attr('fill-opacity', 0.8);
+          Utils.hideTooltip();
+        });
+      yPos += h;
+    });
+
+    // Sector label
+    if (d.width > 30) {
+      svg.append('text')
+        .attr('x', d.x + d.width / 2)
+        .attr('y', innerHeight + 15)
+        .attr('text-anchor', 'middle')
+        .attr('fill', Utils.colors.textTertiary)
+        .attr('font-size', '8px')
+        .text(Utils.truncate(d.sector, 8));
+    }
+  });
+
+  // Legend
+  const legend = svg.append('g').attr('transform', `translate(0, -20)`);
+  tiers.forEach((tier, i) => {
+    legend.append('rect')
+      .attr('x', i * 70)
+      .attr('width', 10)
+      .attr('height', 10)
+      .attr('fill', tierColors[tier]);
+    legend.append('text')
+      .attr('x', i * 70 + 14)
+      .attr('y', 9)
+      .attr('fill', Utils.colors.textSecondary)
+      .attr('font-size', '9px')
+      .text(tier);
+  });
+}
+
+// ============================================
+// Dot Matrix (Individual Startups)
+// ============================================
+function renderDotMatrix() {
+  const container = document.getElementById('sectors-dots');
+  if (!container) return;
+
+  const { width, height } = Utils.getChartDimensions(container);
+  const margin = { top: 30, right: 20, bottom: 20, left: 100 };
+  const innerWidth = width - margin.left - margin.right;
+  const innerHeight = height - margin.top - margin.bottom;
+
+  const sectors = Object.keys(DATA.bySector).sort((a, b) =>
+    DATA.bySector[b].count - DATA.bySector[a].count
+  );
+
+  const svg = d3.select(container)
+    .append('svg')
+    .attr('width', width)
+    .attr('height', height)
+    .append('g')
+    .attr('transform', `translate(${margin.left},${margin.top})`);
+
+  const dotSize = 5;
+  const dotSpacing = 7;
+  const maxDotsPerRow = Math.floor(innerWidth / dotSpacing);
+
+  let yOffset = 0;
+
+  sectors.forEach(sector => {
+    const startups = DATA.startups.filter(s => s.sector === sector);
+    const rows = Math.ceil(startups.length / maxDotsPerRow);
+    const rowHeight = rows * dotSpacing + 15;
+
+    // Sector label
+    svg.append('text')
+      .attr('x', -8)
+      .attr('y', yOffset + rowHeight / 2)
+      .attr('text-anchor', 'end')
+      .attr('dominant-baseline', 'middle')
+      .attr('fill', Utils.getSectorColor(sector))
+      .attr('font-size', '9px')
+      .text(Utils.truncate(sector, 12));
+
+    // Draw dots
+    startups.forEach((s, i) => {
+      const col = i % maxDotsPerRow;
+      const row = Math.floor(i / maxDotsPerRow);
+
+      svg.append('circle')
+        .attr('cx', col * dotSpacing + dotSize / 2)
+        .attr('cy', yOffset + row * dotSpacing + dotSize / 2)
+        .attr('r', dotSize / 2)
+        .attr('fill', Utils.getReasonColor(s.primaryReason))
+        .attr('fill-opacity', 0.7)
+        .style('cursor', 'pointer')
+        .on('mouseenter', function(event) {
+          d3.select(this).attr('r', dotSize).attr('fill-opacity', 1);
+          const html = `
+            <div class="tooltip-title">${s.name}</div>
+            <div class="tooltip-row"><span class="tooltip-label">Reason</span><span>${s.primaryReason}</span></div>
+            <div class="tooltip-row"><span class="tooltip-label">Survival</span><span>${s.survivalYears} yrs</span></div>
+          `;
+          Utils.showTooltip(html, event.pageX, event.pageY);
+        })
+        .on('mouseleave', function() {
+          d3.select(this).attr('r', dotSize / 2).attr('fill-opacity', 0.7);
+          Utils.hideTooltip();
+        });
+    });
+
+    yOffset += rowHeight;
+  });
 }
