@@ -352,7 +352,7 @@ p {
 }
 
 /* ============================================
-   2x2 Dashboard Grid
+   Dashboard Grids
    ============================================ */
 .dashboard-grid {
   display: grid;
@@ -361,6 +361,11 @@ p {
   gap: var(--gap);
   height: 100%;
   min-height: 0;
+}
+
+.dashboard-grid.grid-3x2 {
+  grid-template-columns: 1fr 1fr 1fr;
+  grid-template-rows: 1fr 1fr;
 }
 
 /* Individual Quadrant */

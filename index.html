@@ -69,6 +69,7 @@
 
       <nav class="tab-nav">
         <button class="tab-btn active" data-tab="overview">Overview</button>
+        <button class="tab-btn" data-tab="patterns">Patterns</button>
         <button class="tab-btn" data-tab="sectors">Sectors</button>
         <button class="tab-btn" data-tab="funding">Funding</button>
         <button class="tab-btn" data-tab="timeline">Timeline</button>
@@ -134,7 +135,76 @@
         </div>
       </div>
 
-      <!-- Tab 2: Sectors -->
+      <!-- Tab 2: Patterns & Correlations -->
+      <div id="patterns" class="tab-panel">
+        <div class="dashboard-grid grid-3x2">
+          <!-- Top Left: Correlation Matrix -->
+          <div class="quadrant">
+            <div class="quadrant-header">
+              <div class="quadrant-title">Correlation Matrix</div>
+              <div class="quadrant-subtitle">funding, survival, reasons relationships</div>
+            </div>
+            <div class="quadrant-content">
+              <div class="chart-container" id="patterns-correlation"></div>
+            </div>
+          </div>
+
+          <!-- Top Middle: Survival Curves -->
+          <div class="quadrant">
+            <div class="quadrant-header">
+              <div class="quadrant-title">Survival Curves</div>
+              <div class="quadrant-subtitle">by funding tier</div>
+            </div>
+            <div class="quadrant-content">
+              <div class="chart-container" id="patterns-survival"></div>
+            </div>
+          </div>
+
+          <!-- Top Right: Reason Combinations -->
+          <div class="quadrant">
+            <div class="quadrant-header">
+              <div class="quadrant-title">Deadly Combinations</div>
+              <div class="quadrant-subtitle">most common reason pairs</div>
+            </div>
+            <div class="quadrant-content">
+              <div class="chart-container" id="patterns-combinations"></div>
+            </div>
+          </div>
+
+          <!-- Bottom Left: Sector x Reason Heatmap -->
+          <div class="quadrant">
+            <div class="quadrant-header">
+              <div class="quadrant-title">Sector Vulnerabilities</div>
+              <div class="quadrant-subtitle">which sectors fail for which reasons</div>
+            </div>
+            <div class="quadrant-content">
+              <div class="chart-container" id="patterns-sector-reason"></div>
+            </div>
+          </div>
+
+          <!-- Bottom Middle: Funding Efficiency -->
+          <div class="quadrant">
+            <div class="quadrant-header">
+              <div class="quadrant-title">Funding Efficiency</div>
+              <div class="quadrant-subtitle">$ per year of survival by sector</div>
+            </div>
+            <div class="quadrant-content">
+              <div class="chart-container" id="patterns-efficiency"></div>
+            </div>
+          </div>
+
+          <!-- Bottom Right: Key Insights -->
+          <div class="quadrant">
+            <div class="quadrant-header">
+              <div class="quadrant-title">Key Insights</div>
+              <div class="quadrant-subtitle">statistical findings</div>
+            </div>
+            <div class="quadrant-content" id="patterns-insights"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tab 3: Sectors -->
       <div id="sectors" class="tab-panel">
         <div class="dashboard-grid">
           <!-- Top Left: Sector Summary -->
@@ -276,6 +346,7 @@
   <script src="js/utils.js"></script>
   <script src="js/hero.js"></script>
   <script src="js/tabs/overview.js"></script>
+  <script src="js/tabs/patterns.js"></script>
   <script src="js/tabs/sectors.js"></script>
   <script src="js/tabs/funding.js"></script>
   <script src="js/tabs/timeline.js"></script>
