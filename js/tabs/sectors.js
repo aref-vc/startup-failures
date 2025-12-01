@@ -10,10 +10,6 @@ function initSectors() {
   renderSectorRadar();
   renderSectorSurvival();
   renderSectorBars();
-  renderSectorFunding();
-  renderSectorTimeline();
-  renderReasonDominance();
-  renderSectorComparison();
 }
 
 // ============================================

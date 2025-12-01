@@ -10,10 +10,6 @@ function initTimeline() {
   renderDecadeComparison();
   renderEraCards();
   renderNotableFailures();
-  renderFailureAcceleration();
-  renderFundingTrend();
-  renderSurvivalTrend();
-  renderDecadeStats();
 }
 
 // ============================================

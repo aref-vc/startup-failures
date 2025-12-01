@@ -10,10 +10,6 @@ function initOverview() {
   renderFailureTreemap();
   renderCoOccurrenceHeatmap();
   renderYearlyTimeline();
-  renderReasonSurvival();
-  renderFundingDistribution();
-  renderSectorPie();
-  renderReasonCountDist();
 }
 
 // ============================================

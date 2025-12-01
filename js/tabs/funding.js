@@ -10,10 +10,6 @@ function initFunding() {
   renderFundingScatter();
   renderTopFunded();
   renderFundingYearly();
-  renderTierSurvival();
-  renderFundingByReason();
-  renderFundingOutliers();
-  renderFundingROI();
 }
 
 // ============================================

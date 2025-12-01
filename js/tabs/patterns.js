@@ -7,12 +7,8 @@ function initPatterns() {
   patternsInitialized = true;
 
   renderCorrelationMatrix();
-  renderSurvivalCurves();
-  renderReasonCombinations();
-  renderFundingSurvivalScatter();
-  renderSectorReasonHeatmap();
-  renderFundingEfficiency();
   renderReasonNetwork();
+  renderReasonCombinations();
   renderKeyInsights();
 }
 
