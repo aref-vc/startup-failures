@@ -22,8 +22,46 @@
 </head>
 <body>
   <div class="app">
+    <!-- Hero Section -->
+    <section class="hero" id="hero">
+      <div class="hero-content">
+        <div class="hero-text">
+          <h1 class="hero-title">
+            <span class="hero-accent">$57 Billion</span> in Lessons
+          </h1>
+          <p class="hero-subtitle">
+            An analytical deep-dive into <strong id="hero-count">403</strong> startup failures,
+            uncovering the patterns, correlations, and insights behind why promising ventures collapse.
+          </p>
+          <div class="hero-stats-row">
+            <div class="hero-stat">
+              <div class="hero-stat-value" id="hero-startups">403</div>
+              <div class="hero-stat-label">Failed Startups</div>
+            </div>
+            <div class="hero-stat">
+              <div class="hero-stat-value coral" id="hero-funding">$57B</div>
+              <div class="hero-stat-label">Capital Lost</div>
+            </div>
+            <div class="hero-stat">
+              <div class="hero-stat-value cyan" id="hero-years">7.5</div>
+              <div class="hero-stat-label">Avg Years to Failure</div>
+            </div>
+            <div class="hero-stat">
+              <div class="hero-stat-value amber" id="hero-peak">2020</div>
+              <div class="hero-stat-label">Peak Failure Year</div>
+            </div>
+          </div>
+        </div>
+        <div class="hero-visual" id="hero-visual"></div>
+      </div>
+      <div class="hero-scroll-hint">
+        <span>Scroll to explore</span>
+        <div class="scroll-arrow"></div>
+      </div>
+    </section>
+
     <!-- Header with Tab Navigation -->
-    <header class="header">
+    <header class="header" id="sticky-header">
       <div class="logo">
         <div class="logo-icon">X</div>
         <div class="logo-text">Startup <span>Failures</span></div>
@@ -236,6 +274,7 @@
   <script src="https://d3js.org/d3.v7.min.js"></script>
   <script src="js/data.js"></script>
   <script src="js/utils.js"></script>
+  <script src="js/hero.js"></script>
   <script src="js/tabs/overview.js"></script>
   <script src="js/tabs/sectors.js"></script>
   <script src="js/tabs/funding.js"></script>

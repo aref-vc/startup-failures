@@ -261,7 +261,7 @@ const Utils = {
     axis.selectAll('path').attr('stroke', this.colors.border);
     axis.selectAll('text')
       .attr('fill', this.colors.textTertiary)
-      .style('font-size', '10px');
+      .style('font-size', '12px');
   },
 
   // Add grid lines
